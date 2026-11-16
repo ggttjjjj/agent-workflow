@@ -9,6 +9,7 @@ export default function Inspector({plan, req, task, onChange, onDelete}: {
 }) {
     if (!task) return <aside className="inspector"><h3>任务详情</h3><p
         className="hint">选择画布节点，查看目标、输入输出和负责角色。</p></aside>;
+    const dependents = plan.pm.tasks.filter(x => x.dependsOn.includes(task.id));
     const field = (key: 'title' | 'goal') => <label
         className="field">{key === 'title' ? '任务标题' : '任务目标'}<textarea
         aria-label={key === 'title' ? '任务标题' : '任务目标'} rows={key === 'title' ? 2 : 3} value={task[key]}
@@ -65,6 +66,8 @@ export default function Inspector({plan, req, task, onChange, onDelete}: {
                                                                                             criteria: e.target.checked ? [...task.criteria, c.id] : task.criteria.filter(id => id !== c.id)
                                                                                         })}/>{c.text}</label>)}</div>
         </label>
-        <button className="danger" onClick={onDelete}>删除任务</button>
+        <button className="danger" onClick={onDelete} title="快捷键 Delete / Backspace">删除任务</button>
+        <p className="hint">选中节点后也可按 Delete / Backspace 删除，可撤销。{dependents.length > 0 &&
+            `删除后 ${dependents.length} 项下游依赖会被移除。`}</p>
     </aside>
 }

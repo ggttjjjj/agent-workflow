@@ -65,6 +65,21 @@ export default function Editor({w, onUpdate, onError}: {
         change({...draft, pm: {...draft.pm, tasks: draft.pm.tasks.map(x => x.id === t.id ? t : x)}})
     }
 
+    function deleteTask(id: string) {
+        if (!id || !draft.pm.tasks.some(t => t.id === id)) return;
+        change({
+            ...draft,
+            pm: {
+                ...draft.pm,
+                tasks: draft.pm.tasks.filter(t => t.id !== id).map(t => ({
+                    ...t,
+                    dependsOn: t.dependsOn.filter(x => x !== id)
+                }))
+            }
+        });
+        setSelected('')
+    }
+
     function reset(plan = revision.plan, id = revision.id) {
         setDraft(structuredClone(plan));
         setBase(id);
@@ -198,7 +213,7 @@ export default function Editor({w, onUpdate, onError}: {
                     api<Workflow>(`/workflows/${w.id}/layout`, 'PUT', {layout: l}).then(onUpdate).catch(e => onError(e.message))
                 }}>整理布局
                 </button>
-                <span>拖动端口建立依赖 · 双击连线删除</span></div>
+                <span>拖动端口建立依赖 · 选中节点或连线后按 Delete / Backspace 删除（可撤销）</span></div>
             <div className="workspace"><Graph plan={draft} layout={layout} selected={selected} onSelect={setSelected}
                                               onLayout={l => {
                                                   setLayout(l);
@@ -221,26 +236,13 @@ export default function Editor({w, onUpdate, onError}: {
                     return
                 }
                 taskChange({...target, dependsOn: [...new Set([...target.dependsOn, c.source])]})
-            }} onDeleteEdge={(from, to) => taskChange({
-                ...draft.pm.tasks.find(t => t.id === to)!,
-                dependsOn: draft.pm.tasks.find(t => t.id === to)!.dependsOn.filter(x => x !== from)
-            })}/><Inspector plan={draft} req={req} task={draft.pm.tasks.find(t => t.id === selected)}
-                            onChange={taskChange} onDelete={() => {
-                const dependents = draft.pm.tasks.filter(t => t.dependsOn.includes(selected));
-                if (confirm(`删除任务？${dependents.length}项下游的依赖将移除；输入引用保留并提示修复，不能直接保存无效图。`)) {
-                    change({
-                        ...draft,
-                        pm: {
-                            ...draft.pm,
-                            tasks: draft.pm.tasks.filter(t => t.id !== selected).map(t => ({
-                                ...t,
-                                dependsOn: t.dependsOn.filter(x => x !== selected)
-                            }))
-                        }
-                    });
-                    setSelected('')
-                }
-            }}/></div>
+            }} onDeleteEdge={(from, to) => {
+                const target = draft.pm.tasks.find(t => t.id === to);
+                if (!target) return;
+                taskChange({...target, dependsOn: target.dependsOn.filter(x => x !== from)})
+            }} onDeleteNode={deleteTask}/><Inspector plan={draft} req={req} task={draft.pm.tasks.find(t => t.id === selected)}
+                                                    onChange={taskChange}
+                                                    onDelete={() => deleteTask(selected)}/></div>
         </>}
         {tab === 'agents' && <div className="scroll-content">
             <div className="section-title"><p>角色由编排器按需求生成。能力仅为未来声明，尚未接入或执行。</p>

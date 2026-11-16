@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {Store} from '../server/store.ts';
-import {Engine} from '../server/engine.ts';
+import {Engine, checkQuestions} from '../server/engine.ts';
 import {readStream} from '../server/model.ts';
 import {defaults, validatePlan, current, type Plan, type Workflow} from '../shared/domain.ts';
 import {fixture} from './fixtures.ts';
@@ -55,6 +55,65 @@ test('valid structure, cycle, dangling assignment and coverage are distinguished
     assert.ok(es.some(e => e.message.includes('Agent')));
     assert.ok(es.some(e => e.level === 'coverage'))
 });
+test('clarification options are trimmed and require a single/multi mode', () => {
+    const questions = checkQuestions([{
+        id: 'Q1',
+        text: '范围？',
+        reason: '必要',
+        multi: false,
+        options: [' 仅内部 ', '公开', '合作方']
+    }]);
+    assert.deepEqual(questions[0].options, ['仅内部', '公开', '合作方']);
+    assert.equal(questions[0].multi, false);
+    assert.equal(checkQuestions([{
+        id: 'Q2',
+        text: '资源？',
+        reason: '必要',
+        multi: true,
+        options: ['场地', '志愿者', '预算']
+    }])[0].multi, true);
+    assert.throws(() => checkQuestions([{id: 'Q1', text: '范围？', reason: '必要', multi: false}]), /候选项/);
+    assert.throws(() => checkQuestions([{
+        id: 'Q1',
+        text: '范围？',
+        reason: '必要',
+        multi: false,
+        options: ['只有一个', '第二个']
+    }]), /候选项/);
+    assert.throws(() => checkQuestions([{
+        id: 'Q1',
+        text: '范围？',
+        reason: '必要',
+        multi: false,
+        options: ['重复', '重复', '唯一']
+    }]), /重复/);
+    assert.throws(() => checkQuestions([{
+        id: 'Q1',
+        text: '范围？',
+        reason: '必要',
+        options: ['甲', '乙', '丙']
+    }]), /多选/);
+});
+test('waiting job keeps lettered choices and mode for the question UI', async () => {
+    const {store, w} = setup();
+    const engine = new Engine(store, async () => ({
+        result: {
+            kind: 'clarify',
+            questions: [{
+                id: 'Q1',
+                text: '可以动员哪些资源？',
+                reason: '决定任务边界',
+                multi: true,
+                options: ['场地', '志愿者', '预算']
+            }]
+        }, usage: null
+    }));
+    engine.start(w.id, 1, '');
+    const done = await settle(store, w.id);
+    assert.equal(done.job?.status, 'waiting');
+    assert.deepEqual(done.job?.questions[0].options, ['场地', '志愿者', '预算']);
+    assert.equal(done.job?.questions[0].multi, true);
+});
 test('stream handles final content, usage, reasoning omission and [DONE]', async () => {
     const text = 'data: ' + JSON.stringify({
         choices: [{
@@ -101,7 +160,7 @@ test('orchestration issues stop without auto-loop and resume with original setti
             result: {
                 kind: 'issues',
                 issues: ['需要明确范围'],
-                questions: [{id: 'Q1', text: '范围？', reason: '必要'}]
+                questions: [{id: 'Q1', text: '范围？', reason: '必要', multi: false, options: ['仅内部', '公开', '待定']}]
             }, usage: null
         } : response(s)
     });
