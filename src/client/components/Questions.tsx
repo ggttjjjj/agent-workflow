@@ -80,7 +80,7 @@ export default function Questions({questions, busy, disabled, onSubmit}: {
                         <textarea autoFocus aria-label={q.text + ' 的自定义回答'} rows={2} placeholder="输入你的回答…"
                                   value={custom[q.id] || ''}
                                   onChange={e => setCustom(s => ({...s, [q.id]: e.target.value}))}/>}
-                </> : <label className="field question-free">该问题没有候选选项，请直接填写回答<textarea
+                </> : <label className="field question-free">回答<textarea
                     aria-label={q.text + ' 的回答'} rows={2} placeholder="输入你的回答…" value={custom[q.id] || ''}
                     onChange={e => setCustom(s => ({...s, [q.id]: e.target.value}))}/></label>}
             </section>
@@ -88,7 +88,6 @@ export default function Questions({questions, busy, disabled, onSubmit}: {
         <label className="field">补充说明（可选）<textarea rows={2} value={notes}
                                                          placeholder="还有其他背景、约束或偏好？"
                                                          onChange={e => setNotes(e.target.value)}/></label>
-        {!complete && <p className="hint">请完成每道题：单选题选一项，多选题可选多项；选择“自定义回答”时请填写内容。</p>}
         <button className="primary" disabled={busy || disabled || !complete} onClick={() => onSubmit(compose())}>
             提交回答并继续分析
         </button>

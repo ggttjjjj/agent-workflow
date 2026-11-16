@@ -61,7 +61,6 @@ export default function Regenerate({w, busy, configured, onGenerate}: {
                     <button className="primary" disabled={blocked} onClick={() => void submit()}>{label}</button>
                     {generating && <span className="pulse">正在生成，可在「编排画布」的系统规划节点查看与取消</span>}
                 </div>
-                <p className="hint">意见只影响本次生成；需求级验收条件的调整请使用顶部「查看 / 修改需求」。</p>
             </div>
             <aside className="regenerate-status">
                 <h3>当前基线</h3>

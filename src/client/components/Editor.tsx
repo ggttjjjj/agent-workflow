@@ -2,11 +2,13 @@ import {useEffect, useState, type ReactNode} from 'react';
 import {current, defaults, validatePlan, type Workflow, type Plan, type Agent} from '../../shared/domain';
 import Graph, {positions} from './Graph';
 import Inspector from './Inspector';
-import PlanningDetails, {PlanningOverview} from './PlanningDetails';
+import PlanningDetails from './PlanningDetails';
 import {stageIds, stageOf} from '../../shared/planning';
 import PlanComparison from './PlanComparison';
 import {api} from '../api';
 import {confirmState, saveState} from '../editorState';
+import Icon from './Icon';
+import FloatingNotice from './FloatingNotice';
 
 type Notice = {text: string; tone: 'saved' | 'confirmed'; requirementVersion: number};
 
@@ -16,6 +18,12 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
     onError: (e: string) => void;
     regenerate: ReactNode
 }) {
+    const [detailsOpen, setDetailsOpen] = useState(false), [focusMode, setFocusMode] = useState(false);
+    useEffect(() => {
+        const escape = (event: KeyboardEvent) => {if (event.key === 'Escape') {setFocusMode(false); setDetailsOpen(false)}};
+        window.addEventListener('keydown', escape);
+        return () => window.removeEventListener('keydown', escape)
+    }, []);
     const saved = current(w);
     // An empty editing surface contains system stages only, never partial tasks.
     const revision = saved || {id: '', number: 0, createdAt: '', confirmedAt: undefined, plan: {
@@ -98,6 +106,23 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
 
     function taskChange(t: Plan['pm']['tasks'][number]) {
         change({...draft, pm: {...draft.pm, tasks: draft.pm.tasks.map(x => x.id === t.id ? t : x)}})
+    }
+
+    function editNode(id: string) {
+        setSelected(id);
+        setDetailsOpen(true)
+    }
+
+    function duplicateTask(id: string) {
+        const source = draft.pm.tasks.find(t => t.id === id);
+        if (!source || !saved) return;
+        const copy = {...structuredClone(source), id: 'T-' + crypto.randomUUID().slice(0, 6), title: source.title + '（副本）'};
+        change({...draft, pm: {...draft.pm, tasks: [...draft.pm.tasks, copy]}});
+        const origin = layout[id] || positions(draft)[id];
+        const next = {...layout, [copy.id]: {x: origin.x + 40, y: origin.y + 240}};
+        setLayout(next);
+        api<Workflow>(`/workflows/${w.id}/layout`, 'PUT', {layout: next}).then(onUpdate).catch(e => onError(e.message));
+        editNode(copy.id)
     }
 
     function deleteTask(id: string) {
@@ -190,7 +215,6 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
 
     const agentChange = (a: Agent) => change({...draft, agents: draft.agents.map(x => x.id === a.id ? a : x)});
     return <div className="editor">
-        <PlanningOverview w={w}/>
         <div className="editor-head">
             <div><h1>{w.title}</h1><span className="tag"
                 title={revision.confirmedAt ? `确认于 ${new Date(revision.confirmedAt).toLocaleString()}` : undefined}>{saved ? `${confirmed && !dirty ? '已确认' : '未确认'} · r${revision.number}` : '规划阶段'}</span><small
@@ -206,10 +230,9 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
             </div>
         </div>
         {notice && notice.requirementVersion === w.requirement.version &&
-        <div className={'editor-notice ' + notice.tone} role="status">
-            <span>{notice.text}</span>
-            <button onClick={() => setNotice(undefined)} aria-label="关闭提示">×</button>
-        </div>}
+        <FloatingNotice tone={notice.tone === 'confirmed' ? 'success' : 'info'} onClose={() => setNotice(undefined)}>
+            {notice.text}
+        </FloatingNotice>}
         {conflict && <div className="warning">草稿基础版本与当前方案冲突，双方内容均保留。
             <button onClick={() => {
                 if (confirm('丢弃本地草稿并加载当前已保存方案？')) reset()
@@ -247,9 +270,10 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
                 : [['graph', '编排画布']]).map(([id, name]) =>
             <button key={id} className={tab === id ? 'active' : ''}
                     onClick={() => setTab(id)}>{name}{id === 'coverage' && findings.length > 0 ? ' · ' + findings.length : ''}</button>)}</nav>
-        {tab === 'graph' && <>
-            {saved && <div className="toolbar">
-                <button onClick={() => {
+        {tab === 'graph' && <section className={`canvas-shell${focusMode ? ' canvas-focus' : ''}`} aria-label="编排画布工作区">
+            <div className="toolbar canvas-toolbar" role="toolbar" aria-label="画布编辑工具">
+                <div className="canvas-tool-group">
+                <button className="canvas-add" disabled={!saved} onClick={() => {
                     const id = 'T-' + crypto.randomUUID().slice(0, 6);
                     change({
                         ...draft,
@@ -268,9 +292,12 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
                             }]
                         }
                     });
-                    setSelected(id)
-                }}>＋ 新增任务
+                    editNode(id)
+                }}><Icon name="plus" size={16}/> 新增任务
                 </button>
+                <button disabled={!selected} onClick={() => editNode(selected)}><Icon name="edit" size={16}/> 编辑</button>
+                <button disabled={!saved || !draft.pm.tasks.some(t => t.id === selected)} onClick={() => duplicateTask(selected)}><Icon name="copy" size={16}/> 复制</button>
+                </div><div className="canvas-tool-group canvas-history">
                 <button disabled={!past.length} onClick={() => {
                     setFuture(f => [draft, ...f]);
                     setDraft(past[past.length - 1]);
@@ -289,8 +316,11 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
                     api<Workflow>(`/workflows/${w.id}/layout`, 'PUT', {layout: l}).then(onUpdate).catch(e => onError(e.message))
                 }}>整理布局
                 </button>
-                <span>拖动端口建立依赖 · 选中节点或连线后按 Delete / Backspace 删除普通任务（可撤销）；系统阶段及虚线不可删除、复制或改接</span></div>}
-            <div className="workspace"><Graph plan={saved ? draft : undefined} job={w.job} viewport={w.viewport} onViewport={viewport => {
+                </div><div className="canvas-tool-group canvas-view-tools">
+                <button aria-label="节点属性" title="节点属性" aria-pressed={detailsOpen} onClick={() => setDetailsOpen(!detailsOpen)}><Icon name="panel" size={16}/><span>属性</span></button>
+                <button aria-label={focusMode ? '退出专注' : '专注画布'} title={focusMode ? '退出专注' : '专注画布'} aria-pressed={focusMode} onClick={() => setFocusMode(!focusMode)}><Icon name="expand" size={16}/><span>{focusMode ? '退出专注' : '专注画布'}</span></button>
+                </div></div>
+            <div className={`workspace${detailsOpen ? ' with-details' : ''}`}><Graph plan={saved ? draft : undefined} job={w.job} viewport={w.viewport} onEdit={editNode} onDuplicate={duplicateTask} onViewport={viewport => {
                 api<Workflow>(`/workflows/${w.id}/layout`, 'PUT', {viewport}).then(onUpdate).catch(e => onError(e.message))
             }} layout={layout} selected={selected} onSelect={setSelected}
                                               onLayout={l => {
@@ -318,10 +348,11 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
                 const target = draft.pm.tasks.find(t => t.id === to);
                 if (!target || stageOf(from) || stageOf(to)) return;
                 taskChange({...target, dependsOn: target.dependsOn.filter(x => x !== from)})
-            }} onDeleteNode={deleteTask}/>{stageOf(selected) ? <PlanningDetails key={stageOf(selected)} w={w} stage={stageOf(selected)!} onUpdate={onUpdate} onError={onError}/> : <Inspector plan={draft} req={req} task={draft.pm.tasks.find(t => t.id === selected)}
-                                                    onChange={taskChange}
-                                                    onDelete={() => deleteTask(selected)}/>}</div>
-        </>}
+            }} onDeleteNode={deleteTask}/>{detailsOpen && <section className="node-details" aria-label="节点属性"><header className="node-details-head"><div><strong>{stageOf(selected) ? '规划阶段' : '编辑节点'}</strong></div><button aria-label="关闭节点属性" onClick={() => setDetailsOpen(false)}><Icon name="close" size={18}/></button></header>{stageOf(selected) ? <PlanningDetails key={stageOf(selected)} w={w} stage={stageOf(selected)!} onUpdate={onUpdate} onError={onError}/> : <Inspector plan={draft} req={req} task={draft.pm.tasks.find(t => t.id === selected)}
+                                                     onChange={taskChange}
+                                                     onDelete={() => deleteTask(selected)}/>}</section>}</div>
+            <footer className="canvas-status"><span><i/> {draft.pm.tasks.length} 个任务 · {draft.agents.length} 个 Agent</span></footer>
+        </section>}
         {tab === 'agents' && <div className="scroll-content">
             <div className="section-title"><p>角色由编排器按需求生成。</p>
                 <button onClick={() => change({
@@ -362,7 +393,7 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
                 </section>)}</div>
             <h3>全部验收条件均为必需项</h3>{draft.pm.criteria.map(c => <div className="coverage-row" key={c.id}>
                 <strong>{c.id} · {c.text}</strong><span>{draft.pm.tasks.filter(t => t.criteria.includes(c.id)).map(t => t.title).join(' / ') || '⚠ 未覆盖'}</span>
-            </div>)}<p className="hint">关联表示规划覆盖；需求级修改请通过“修改需求”提交。</p>
+            </div>)}
             <h3>校验结果</h3>{findings.length ? findings.map((f, i) => <button className="finding" key={i}
                                                                                onClick={() => {
                                                                                    if (f.path.startsWith('task:')) {

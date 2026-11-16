@@ -197,18 +197,12 @@ export default function Inspector({
           ))}
         </div>
       </label>
-      <button
-        className="danger"
-        onClick={onDelete}
-        title="快捷键 Delete / Backspace"
-      >
+      <button className="danger" onClick={onDelete}>
         删除任务
       </button>
-      <p className="hint">
-        选中节点后也可按 Delete / Backspace 删除，可撤销。
-        {dependents.length > 0 &&
-          `删除后 ${dependents.length} 项下游依赖会被移除。`}
-      </p>
+      {dependents.length > 0 && (
+        <p className="hint">删除后 {dependents.length} 项下游依赖会被移除。</p>
+      )}
     </aside>
   );
 }

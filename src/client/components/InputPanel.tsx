@@ -61,12 +61,11 @@ export default function InputPanel({initial, onSubmit, busy, label = '开始 AI 
                                                                                           multiple onChange={e => {
             void add([...e.target.files || []]);
             e.target.value = ''
-        }}/></label><span className="composer-capability">支持粘贴图片</span></div>
+        }}/></label></div>
         <button type="submit" className="primary composer-submit" disabled={busy || (!text.trim() && !images.length)}
                 aria-label={busy ? '正在提交…' : label}><span>{busy ? '正在提交…' : label}</span><Icon name="arrow" size={19}/></button>
         </div>
         </form>
-        <div className="composer-help"><span>文本与图片将发送给 DeepSeek 分析</span><span>Ctrl / ⌘ + Enter 提交</span></div>
         {!initial && <div className="starter-prompts" aria-label="需求灵感">{examples.map(example => <button type="button" key={example.title} disabled={busy} onClick={() => {setText(example.text); document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus()}}><Icon name="plus" size={15}/>{example.title}</button>)}</div>}
     </div>
 }

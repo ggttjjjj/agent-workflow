@@ -6,6 +6,7 @@ import Editor from './components/Editor';
 import PlanPanel from './components/PlanPanel';
 import Regenerate from './components/Regenerate';
 import Icon from './components/Icon';
+import FloatingNotice from './components/FloatingNotice';
 import {current, type Workflow, type Picture, type PlanLists} from '../shared/domain';
 
 export default function App() {
@@ -27,6 +28,9 @@ export default function App() {
         setW(undefined);
         const stream = new EventSource(`/api/workflows/${id}/events`);
         let live = true;
+        stream.onopen = () => {
+            if (live) setError(previous => previous === '连接暂时中断，正在重连…' ? '' : previous)
+        };
         stream.onmessage = e => {
             if (!live) return;
             const next: Workflow = JSON.parse(e.data);
@@ -105,10 +109,18 @@ export default function App() {
         <aside className="sidebar" id="app-sidebar" aria-label="方案导航"><a className="brand" href="#" onClick={e => {
             e.preventDefault();
             setId('')
-        }}><b>〃</b><span>织序 <em>weave</em><small>让每个想法，有序发生</small></span></a>
+        }}><b>〃</b><span>织序 <em>weave</em></span></a>
             <PlanPanel lists={lists} currentId={id} onLists={setLists} onDeleted={forget}
                        onSelect={next => {setId(next); setError(''); setSidebarOpen(false)}}
                        onCreate={() => {setId(''); setError(''); setSidebarOpen(false)}}/>
+            {id && w && <button className="sidebar-requirement" onClick={() => {
+                setRequirementOpen(true);
+                setSidebarOpen(false)
+            }} aria-label={`查看或修改需求 v${w.requirement.version}，${w.requirement.images.length} 张图片`}>
+                <Icon name="edit" size={17}/>
+                <span><strong>需求与参考资料</strong><small>需求 v{w.requirement.version} · {w.requirement.images.length} 张图片</small></span>
+                <span className="requirement-entry-arrow" aria-hidden="true">↗</span>
+            </button>}
             <div className="sidebar-bottom">
                 <button onClick={() => setSettings(true)}><Icon name="settings" size={18}/> 设置</button>
                 <span className={meta.configured ? 'success' : 'muted'}>{meta.configured ? '● 已配置' : '○ 未配置'}</span>
@@ -117,26 +129,18 @@ export default function App() {
         <main>
             <header className="app-topbar">
                 <button className="mobile-menu" aria-label="切换方案导航" aria-expanded={sidebarOpen} aria-controls="app-sidebar" onClick={() => setSidebarOpen(!sidebarOpen)}><Icon name="menu"/></button>
-                <span className="topbar-title">{id ? '方案工作台' : '新建方案'}<span className="topbar-divider">/</span><span className="topbar-subtitle">AI 工作流规划</span></span>
-                <span className="local-badge"><i/> 本地工作空间</span>
+                <span className="topbar-title">{id ? '方案工作台' : '新建方案'}</span>
+                {id && w && !current(w) && <button className="topbar-plan-action" disabled={busy || generating || !!w.candidate || !meta.configured}
+                                                                 onClick={() => void generate()}>开始规划</button>}
             </header>
-            {error && <div role="alert" className="global-error"><span>{error}</span><button onClick={() => setError('')}>×</button></div>}
+            {error && <FloatingNotice tone="error" onClose={() => setError('')}>{error}</FloatingNotice>}
             {!id ? <div className="welcome">
                 <div className="welcome-heading">
-                    <div className="welcome-eyebrow"><Icon name="sparkles" size={17}/> 从灵感，到清晰的下一步</div>
-                    <h1>嗨，今天想规划些什么？</h1><p>说说你的想法，织序帮你拆解任务、编排角色。<br/>让复杂的事，从一个简单的开始。 </p>
+                    <h1>嗨，今天想规划些什么？</h1><p>说说你的想法，织序帮你拆解任务、编排角色。</p>
                 </div>
                 {!meta.configured && <div className="warning">尚未配置密钥：在项目 .env 中设置 DEEPSEEK_API_KEY 后重启服务。</div>}
                 <InputPanel onSubmit={create} busy={busy} label={meta.configured ? '开始 AI 规划' : '保存需求'}/>
-                <div className="welcome-foot"><span><b>01</b> 分析需求</span><i/> <span><b>02</b> 编排角色</span><i/><span><b>03</b> 人工确认</span></div>
-                <p className="welcome-disclaimer">AI 辅助规划，决策始终由你掌握</p>
             </div> : !w ? <div className="empty">正在打开方案…</div> : <>
-                <div className="requirement-bar">
-                    <span>需求 v{w.requirement.version} · {w.requirement.images.length} 张图片</span>
-                    <button onClick={() => setRequirementOpen(true)}>查看 / 修改需求</button>
-                    {!current(w) && <button disabled={busy || generating || !!w.candidate || !meta.configured}
-                                              onClick={() => void generate()}>开始规划</button>}
-                </div>
                 <Editor key={w.id} w={w} onUpdate={update} onError={setError}
                         regenerate={<Regenerate w={w} busy={busy} configured={meta.configured} onGenerate={generate}/>}/>
             </>}

@@ -1,5 +1,11 @@
-type IconName = 'menu' | 'plus' | 'arrow' | 'image' | 'settings' | 'sparkles';
+type IconName = 'menu' | 'plus' | 'arrow' | 'image' | 'settings' | 'sparkles' | 'edit' | 'copy' | 'panel' | 'expand' | 'close' | 'trash';
 const paths: Record<IconName, string> = {
+    edit: 'm15 5 4 4M4 20l4-1L20 7l-4-4L4 15z',
+    copy: 'M9 9h11v11H9zM15 9V4H4v11h5',
+    panel: 'M3 4h18v16H3zM15 4v16',
+    expand: 'M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5',
+    close: 'm6 6 12 12M6 18 18 6',
+    trash: 'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',
     menu: 'M4 6h16M4 12h16M4 18h16',
     plus: 'M12 5v14M5 12h14',
     arrow: 'M12 19V5m-6 6 6-6 6 6',

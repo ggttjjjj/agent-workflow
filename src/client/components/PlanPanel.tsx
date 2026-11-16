@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState, type MouseEvent} from 'react';
 import {api} from '../api';
+import FloatingNotice from './FloatingNotice';
 import {cleanTitle, MAX_PLAN_TITLE, TRASH_CONFIRM, type PlanLists, type PlanSummary} from '../../shared/domain';
 
 type Dialog = {kind: 'trash' | 'purge' | 'rename'; id: string} | {kind: 'empty'};
@@ -292,7 +293,7 @@ export default function PlanPanel({lists, currentId, onSelect, onCreate, onLists
                                                        onKeyDown={e => {
                                                            if (e.key === 'Enter') renamePlan(target)
                                                        }}/></label>
-                <p className="hint">{[...title.trim()].length}/{MAX_PLAN_TITLE} · 连续空白会合并为一个空格</p>
+                <p className="hint">{[...title.trim()].length}/{MAX_PLAN_TITLE}</p>
                 {note && <p className="error" role="alert">{note}</p>}
                 <footer>
                     <button onClick={closeDialog} disabled={working}>取消</button>
@@ -314,7 +315,6 @@ export default function PlanPanel({lists, currentId, onSelect, onCreate, onLists
                     {target.generating && <div><dt>生成中</dt><dd className="warning">本次生成将立即取消，迟到的模型结果不会再写入。</dd></div>}
                     {hasDraft(target.id) && <div><dt>本地草稿</dt><dd className="warning">该方案有未保存的编辑草稿；移入回收站会清除草稿，撤销无法恢复。</dd></div>}
                 </dl>
-                <p className="hint">移入回收站不会立即删除数据。需要永久释放空间时，请到回收站彻底删除。</p>
                 {note && <p className="error" role="alert">{note}</p>}
                 <footer>
                     <button onClick={closeDialog} disabled={working}>取消</button>
@@ -336,7 +336,6 @@ export default function PlanPanel({lists, currentId, onSelect, onCreate, onLists
                        onKeyDown={e => {
                            if (e.key === 'Enter') purgePlan(target)
                        }}/>
-                <p className="hint">也可先恢复方案，避免误删。</p>
                 {note && <p className="error" role="alert">{note}</p>}
                 <footer>
                     <button onClick={closeDialog} disabled={working}>取消</button>
@@ -357,7 +356,6 @@ export default function PlanPanel({lists, currentId, onSelect, onCreate, onLists
                        onKeyDown={e => {
                            if (e.key === 'Enter') emptyTrash()
                        }}/>
-                <p className="hint">只需要清空部分方案时，请在列表中逐个彻底删除。</p>
                 {note && <p className="error" role="alert">{note}</p>}
                 <footer>
                     <button onClick={closeDialog} disabled={working}>取消</button>
@@ -366,10 +364,9 @@ export default function PlanPanel({lists, currentId, onSelect, onCreate, onLists
                 </footer>
             </section>
         </div>}
-        {toast && <div className="plan-toast" role="status">
+        {toast && <FloatingNotice onClose={() => setToast(undefined)}>
             <span>{toast.message}</span>
             {toast.label && <button onClick={() => toast.run?.()}>{toast.label}</button>}
-            <button className="toast-close" aria-label="关闭提示" onClick={() => setToast(undefined)}>×</button>
-        </div>}
+        </FloatingNotice>}
     </div>
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App';
+import {NoticeProvider} from './components/FloatingNotice';
 import './style.css';
 
-createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
+createRoot(document.getElementById('root')!).render(<React.StrictMode><NoticeProvider><App/></NoticeProvider></React.StrictMode>);

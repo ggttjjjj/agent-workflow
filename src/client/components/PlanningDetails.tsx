@@ -2,16 +2,8 @@ import {useEffect, useState} from 'react';
 import {current, requirementAnalysis, type Settings, type Workflow} from '../../shared/domain';
 import {planningLocked, planningSettings, stageStates, type Stage} from '../../shared/planning';
 import {api} from '../api';
-import {formatUsage} from '../usage';
 import Questions from './Questions';
 
-export const jobLabels: Record<string, string> = {analyzing: '正在分析需求', orchestrating: '正在编排', waiting: '等待澄清回答', issues: '等待处理编排异议', complete: '生成结果已保存', failed: '阶段失败', cancelled: '已取消', interrupted: '已中断', save_failed: '保存失败 · 结果未提交'};
-export function PlanningOverview({w}: {w: Workflow}) {
-    return <section className="planning-overview" aria-live="polite"><strong>{jobLabels[w.job?.status || ''] || '等待开始规划'}</strong>
-        <span>{current(w) ? `当前已保存方案 r${current(w)!.number} · 下游任务尚未执行` : '完整方案校验并保存后才显示任务和 Agent'}</span>
-        {w.job?.elapsedMs != null && <span>耗时 {(w.job.elapsedMs / 1000).toFixed(1)} 秒</span>}
-        <span>用量：{formatUsage(w.job?.usage)}</span>{w.candidate && <span>新候选等待审查，尚未替换当前方案</span>}</section>
-}
 export default function PlanningDetails({w, stage, onUpdate, onError}: {w: Workflow; stage: Stage; onUpdate: (w: Workflow) => void; onError: (message: string) => void}) {
     const config = planningSettings(w), signature = JSON.stringify(config), job = w.job;
     const [draft, setDraft] = useState<Settings>(config), [busy, setBusy] = useState(false), [notice, setNotice] = useState('');

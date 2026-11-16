@@ -9,7 +9,7 @@ import {Store} from '../src/server/store.ts';
 import {Engine} from '../src/server/engine.ts';
 import {defaults, type Job, type Workflow} from '../src/shared/domain.ts';
 import {planningLocked, planningSettings, saveCanvas, savePlanningSettings, stageIds, stageOf, stageStates, systemLinks} from '../src/shared/planning.ts';
-import PlanningDetails, {PlanningOverview} from '../src/client/components/PlanningDetails.tsx';
+import PlanningDetails from '../src/client/components/PlanningDetails.tsx';
 import {fixture} from './fixtures.ts';
 
 const workflow = (): Workflow => {
@@ -110,7 +110,6 @@ test('stage details show only current public preview escaped and explicitly unva
     assert.match(render(w, 'pm'), /暂无本轮已校验结果/);
     w.job = job({status: 'save_failed', stage: 'save', pm: fixture.pm, result: fixture});
     assert.match(render(w, 'orchestrator'), /重试保存（不调用模型）/);
-    assert.match(renderToStaticMarkup(createElement(PlanningOverview, {w})), /保存失败/);
 });
 
 test('engine freezes local stage settings and retries without absorbing later edits', async () => {
