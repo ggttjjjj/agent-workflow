@@ -1,3 +1,4 @@
+import {savePlanningSettings, saveCanvas} from '../shared/planning.ts';
 import {loadConfig, projectRoot} from './config.ts';
 import express from 'express';
 import {randomUUID} from 'node:crypto';
@@ -5,7 +6,8 @@ import {resolve} from 'node:path';
 import sharp from 'sharp';
 import {Store} from './store.ts';
 import {Engine, active} from './engine.ts';
-import {defaults, current, validatePlan, validateSettings, type Picture, type Workflow} from '../shared/domain.ts';
+import {acceptCandidate, confirmRevision} from './revisions.ts';
+import {defaults, current, requirementBaseline, validatePlan, validateSettings, type Picture, type Workflow} from '../shared/domain.ts';
 
 const {port, dataPath} = loadConfig();
 const app = express(), store = new Store(dataPath),
@@ -75,6 +77,7 @@ app.post('/api/workflows', async (q, r) => {
         requirement: req,
         requirements: [req],
         revisions: [],
+        planningSettings: store.settings(),
         layout: {},
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -98,10 +101,10 @@ app.post('/api/workflows/:id/save', (q, r) => r.json(store.mutate(String(q.param
     const old = current(w);
     if (!old || old.id !== q.body.baseId) bad('方案基线已变化', 409);
     const plan = q.body.plan;
-    if (JSON.stringify(plan?.pm?.criteria) !== JSON.stringify(old.plan.pm.criteria) || plan?.requirementVersion !== old.plan.requirementVersion || JSON.stringify(plan?.settings) !== JSON.stringify(old.plan.settings) || plan?.model !== old.plan.model || plan?.effort !== old.plan.effort) bad('需求验收与默认模型配置只能通过重生成更新');
+    if (JSON.stringify(plan?.pm?.criteria) !== JSON.stringify(old.plan.pm.criteria) || plan?.requirementVersion !== old.plan.requirementVersion || JSON.stringify(plan?.settings) !== JSON.stringify(old.plan.settings) || JSON.stringify(plan?.answers) !== JSON.stringify(old.plan.answers) || plan?.model !== old.plan.model || plan?.effort !== old.plan.effort) bad('需求验收、问答与默认模型配置只能通过重生成更新');
     for (const k of ['goal', 'audience', 'deliverables', 'constraints', 'exclusions', 'assumptions'] as const) if (JSON.stringify(plan.pm[k]) !== JSON.stringify(old.plan.pm[k])) bad('需求级内容请通过修改需求更新');
     const req = w.requirements.find(x => x.version === plan.requirementVersion)!;
-    const errors = validatePlan(plan, req).filter(x => x.level === 'error');
+    const errors = validatePlan(plan, req, true, requirementBaseline(w, plan.requirementVersion)).filter(x => x.level === 'error');
     if (errors.length) bad(errors.map(e => e.path + ': ' + e.message).join('\n'));
     const rev = {id: randomUUID(), number: w.revisions.length + 1, plan, createdAt: new Date().toISOString()};
     w.revisions.push(rev);
@@ -109,45 +112,32 @@ app.post('/api/workflows/:id/save', (q, r) => r.json(store.mutate(String(q.param
 }, q.body.expectedVersion)));
 app.post('/api/workflows/:id/candidate', (q, r) => r.json(store.mutate(String(q.params.id), w => {
     if (!w.candidate) bad('没有候选稿');
-    if (q.body.accept) {
-        if (w.candidate!.requirementVersion !== w.requirement.version) bad('候选对应旧需求，请放弃后重新生成', 409);
-        const errors = validatePlan(w.candidate!, w.requirement);
-        if (errors.length) bad('候选校验失败');
-        const rev = {
-            id: randomUUID(),
-            number: w.revisions.length + 1,
-            plan: w.candidate!,
-            createdAt: new Date().toISOString()
-        };
-        w.revisions.push(rev);
-        w.currentId = rev.id
-    }
+    if (q.body.accept) acceptCandidate(w);
     w.candidate = undefined
 }, q.body.expectedVersion)));
 app.post('/api/workflows/:id/confirm', (q, r) => r.json(store.mutate(String(q.params.id), w => {
-    const rev = current(w);
-    if (!rev || rev.id !== q.body.revisionId || w.requirement.version !== q.body.requirementVersion || rev.plan.requirementVersion !== w.requirement.version) bad('方案或需求版本已变化', 409);
-    if (w.candidate || active(w.job) || ['waiting', 'issues'].includes(w.job?.status || '')) bad('请先处理生成、问题或候选稿', 409);
-    const errors = validatePlan(rev.plan, w.requirement);
-    if (errors.length) bad(errors.map(x => x.message).join('\n'));
-    rev.confirmedAt = new Date().toISOString()
+    confirmRevision(w, q.body.revisionId, q.body.requirementVersion)
+}, q.body.expectedVersion)));
+app.put('/api/workflows/:id/planning-settings', (q, r) => r.json(store.mutate(String(q.params.id), w => {
+    savePlanningSettings(w, q.body.settings)
 }, q.body.expectedVersion)));
 app.put('/api/workflows/:id/layout', (q, r) => r.json(store.mutate(String(q.params.id), w => {
-    const layout = q.body.layout;
-    if (!layout || typeof layout !== 'object' || Object.values(layout).some((v: any) => !Number.isFinite(v?.x) || !Number.isFinite(v?.y))) bad('布局无效');
-    w.layout = layout
+    saveCanvas(w, q.body)
 })));
 app.get('/api/workflows/:id/events', (q, r) => {
     store.get(String(q.params.id));
     r.set({'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive'});
     r.flushHeaders();
-    let version = -1;
+    let snapshot = '';
     const send = () => {
         try {
             const w = store.get(String(q.params.id));
-            if (w.version !== version) {
-                version = w.version;
-                r.write(`id: ${version}\ndata: ${JSON.stringify(w)}\n\n`)
+            // A recovery checkpoint can expose save_failed even while every
+            // SQLite write is failing, so that transition has no new DB version.
+            const next = `${w.version}:${w.job?.id || ''}:${w.job?.status || ''}`;
+            if (next !== snapshot) {
+                snapshot = next;
+                r.write(`id: ${w.version}\ndata: ${JSON.stringify(w)}\n\n`)
             } else r.write(': heartbeat\n\n')
         } catch {
             r.end()

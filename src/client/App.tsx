@@ -2,22 +2,9 @@ import {useEffect, useState} from 'react';
 import {api} from './api';
 import InputPanel from './components/InputPanel';
 import SettingsPanel from './components/SettingsPanel';
-import Questions from './components/Questions';
 import Editor from './components/Editor';
-import {formatUsage} from './usage';
 import {current, type Workflow, type Picture} from '../shared/domain';
 
-const states: Record<string, string> = {
-    analyzing: 'PM 正在分析与拆解',
-    orchestrating: 'AI 正在定义角色与分配任务',
-    waiting: '等待澄清回答',
-    issues: '编排器提出调整问题',
-    complete: '方案生成完成',
-    failed: '生成失败',
-    cancelled: '生成已取消',
-    interrupted: '生成已中断',
-    save_failed: '结果保存失败'
-};
 export default function App() {
     const [list, setList] = useState<{
         id: string;
@@ -76,7 +63,7 @@ export default function App() {
         }
     }
 
-    const generating = !!w && ['analyzing', 'orchestrating'].includes(w.job?.status || '');
+    const generating = !!w && ['analyzing', 'orchestrating', 'waiting', 'issues'].includes(w.job?.status || '');
 
     async function generate() {
         if (!w) return;
@@ -111,16 +98,6 @@ export default function App() {
                                                                                                        }}>
                 <strong>{x.title}</strong><span>{x.confirmed ? '已确认' : '待审查'} · {new Date(x.updatedAt).toLocaleDateString()}</span>
             </button>)}{!list.length && <p className="hint">你的编排方案将保存在这里。</p>}</div>
-            {w && <div className="generation"><h3>方案生成进度</h3>
-                <div className="step"><i>{w.job?.pm ? '✓' : '1'}</i>
-                    <div><strong>PM 分析</strong></div>
-                </div>
-                <div className="step"><i>{w.job?.status === 'complete' ? '✓' : '2'}</i>
-                    <div><strong>AI 编排</strong></div>
-                </div>
-                <p className={generating ? 'pulse' : ''}>{states[w.job?.status || ''] || '等待开始规划'}</p>{w.job?.elapsedMs != null &&
-                    <small>耗时 {(w.job.elapsedMs / 1000).toFixed(1)} 秒</small>}<small className="usage">用量：{formatUsage(w.job?.usage)}</small>
-            </div>}
             <div className="sidebar-bottom">
                 <button onClick={() => setSettings(true)}>⚙ 设置</button>
                 <span
@@ -148,41 +125,9 @@ export default function App() {
                            onChange={e => setFeedback(e.target.value)} disabled={generating}/>
                     <button disabled={busy || generating || !!w.candidate || !meta.configured}
                             onClick={generate}>{current(w) ? 'AI 重生成' : '开始规划'}</button>
-                    {generating && <button className="danger"
-                                           onClick={() => invoke(() => api(`/workflows/${w.id}/cancel`, 'POST', {}))}>取消生成</button>}
                 </div>
-                {w.job && <section className={'job-panel ' + (generating ? 'working' : '')} aria-live="polite">
-                    <div className="section-title">
-                        <strong>{states[w.job.status]}</strong>{['failed', 'interrupted', 'cancelled', 'save_failed'].includes(w.job.status) &&
-                        <button disabled={busy || w.job.requirement.version !== w.requirement.version}
-                                onClick={() => invoke(() => api(`/workflows/${w.id}/retry`, 'POST', {expectedVersion: w.version}))}>{w.job.result ? '重试保存（不调用模型）' : w.job.pm ? '重试编排（复用 PM）' : '重试 PM 分析'}</button>}
-                    </div>
-                    {w.job.error &&
-                        <p className="error">{w.job.error}</p>}{w.job.requirement.version !== w.requirement.version &&
-                    <p className="warning">本次请求对应旧需求，结果不会覆盖最新方案；请针对最新需求重生成。</p>}{w.job.issues.map((x, i) =>
-                    <p key={i} className="warning">{x}</p>)}{['waiting', 'issues'].includes(w.job.status) &&
-                    <Questions key={w.job.id} questions={w.job.questions} busy={busy}
-                               disabled={w.job.requirement.version !== w.requirement.version}
-                               onSubmit={answer => {
-                                   void invoke(() => api(`/workflows/${w.id}/retry`, 'POST', {
-                                       expectedVersion: w.version,
-                                       answer
-                                   }))
-                               }}/>}{generating && <details>
-                    <summary>查看流式结果预览（尚未校验）</summary>
-                    <pre>{w.job.preview || '正在等待模型输出…'}</pre>
-                </details>}</section>}
-                {current(w) ? <Editor key={w.id} w={w} onUpdate={update} onError={setError}/> : <div className="empty">
-                    <div className="empty-graph">◇ → ◇ → ◇</div>
-                    <h2>{generating ? '正在组织你的工作流' : '从需求到清晰的分工'}</h2><p>PM 完成分析后，编排器将自动创建任务与
-                    Agent 定义。</p>{w.candidate && <>
-                    <p>候选对应需求 v{w.candidate.requirementVersion}，请先处理候选。</p>
-                    <button onClick={() => invoke(() => api(`/workflows/${w.id}/candidate`, 'POST', {
-                        expectedVersion: w.version,
-                        accept: false
-                    }))}>放弃旧候选
-                    </button>
-                </>}</div>}
+                <Editor key={w.id} w={w} onUpdate={update} onError={setError}/>
+
             </>}
         </main>
         {settings && <SettingsPanel onClose={() => setSettings(false)}/>}{requirementOpen && w &&

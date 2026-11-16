@@ -25,7 +25,8 @@ export interface Picture {
 export interface Requirement {
     version: number;
     text: string;
-    images: Picture[]
+    images: Picture[];
+    analysis?: RequirementAnalysis
 }
 
 export interface Criterion {
@@ -70,6 +71,16 @@ export interface PM {
     tasks: Task[]
 }
 
+export type RequirementAnalysis = Omit<PM, 'tasks'>;
+
+export interface Answer {
+    questions: Question[];
+    answer: string;
+    requirementVersion?: number;
+    stage?: 'pm' | 'orchestrator';
+    issues?: string[]
+}
+
 export interface Plan {
     pm: PM;
     agents: Agent[];
@@ -77,7 +88,8 @@ export interface Plan {
     model: 'deepseek-flash';
     effort: Effort;
     requirementVersion: number;
-    settings: Settings
+    settings: Settings;
+    answers?: Answer[]
 }
 
 export interface Revision {
@@ -106,8 +118,9 @@ export interface Job {
     requirement: Requirement;
     settings: Settings;
     base?: Plan;
+    baseline?: RequirementAnalysis;
     feedback: string;
-    answers: { questions: Question[]; answer: string }[];
+    answers: Answer[];
     questions: Question[];
     issues: string[];
     pm?: PM;
@@ -130,7 +143,10 @@ export interface Workflow {
     revisions: Revision[];
     currentId?: string;
     candidate?: Plan;
+    answers?: Answer[];
     job?: Job;
+    planningSettings?: Settings;
+    viewport?: {x: number; y: number; zoom: number};
     layout: Record<string, { x: number; y: number }>;
     createdAt: string;
     updatedAt: string
@@ -146,7 +162,32 @@ export const current = (w: Workflow) => w.revisions.find(r => r.id === w.current
 const list = (x: unknown): x is string[] => Array.isArray(x) && x.every(v => typeof v === 'string' && v.trim().length > 0);
 const nonempty = (x: unknown) => typeof x === 'string' && x.trim().length > 0;
 
-export function validatePlan(plan: Plan, req: Requirement, assign = true): Finding[] {
+export function requirementAnalysis(pm: PM): RequirementAnalysis {
+    const {tasks: _tasks, ...analysis} = pm;
+    return structuredClone(analysis)
+}
+
+// Legacy documents derive their immutable anchor from the first saved revision,
+// never from a candidate or the latest (potentially weakened) model output.
+export function requirementBaseline(w: Workflow, version = w.requirement.version): RequirementAnalysis | undefined {
+    const req = w.requirements.find(r => r.version === version);
+    const pm = w.revisions.find(r => r.plan.requirementVersion === version)?.plan.pm;
+    return req?.analysis || (w.requirement.version === version ? w.requirement.analysis : undefined) || (pm ? requirementAnalysis(pm) : undefined)
+}
+
+export function validateRequirementIntegrity(pm: PM, baseline?: RequirementAnalysis): Finding[] {
+    if (!baseline) return [];
+    const findings: Finding[] = [];
+    const protect = (path: string) => findings.push({path, message: '不能删除或改变同一需求版本已明确的要求；请保留原内容，需要改变时先澄清并修改需求', level: 'error'});
+    for (const key of ['goal', 'audience'] as const) if (pm?.[key] !== baseline[key]) protect(`pm.${key}`);
+    for (const key of ['deliverables', 'constraints', 'exclusions'] as const) {
+        for (const item of baseline[key]) if (!Array.isArray(pm?.[key]) || !pm[key].includes(item)) protect(`pm.${key}`)
+    }
+    for (const c of baseline.criteria) if (!pm?.criteria?.some(x => x.id === c.id && x.text === c.text)) protect(`criterion:${c.id}`);
+    return findings
+}
+
+export function validatePlan(plan: Plan, req: Requirement, assign = true, baseline = req.analysis): Finding[] {
     const e: Finding[] = [];
     const err = (path: string, message: string, level: Finding['level'] = 'error') => e.push({path, message, level});
     if (!plan?.pm || !Array.isArray(plan.pm.tasks) || !Array.isArray(plan.pm.criteria) || !Array.isArray(plan.agents)) return [{
@@ -155,6 +196,7 @@ export function validatePlan(plan: Plan, req: Requirement, assign = true): Findi
         level: 'error'
     }];
     const p = plan.pm;
+    e.push(...validateRequirementIntegrity(p, baseline));
     if (!nonempty(p.goal) || !nonempty(p.audience)) err('pm', '目标与受众不能为空');
     for (const k of ['deliverables', 'constraints', 'exclusions', 'assumptions'] as const) if (!list(p[k])) err(`pm.${k}`, '需要文本数组（可为空）');
     const ts = p.tasks, ids = new Set<string>(), cs = new Set<string>(), as = new Set<string>();
@@ -169,7 +211,7 @@ export function validatePlan(plan: Plan, req: Requirement, assign = true): Findi
         as.add(a?.id)
     }
     for (const t of ts) {
-        if (!t || !nonempty(t.id) || ids.has(t.id)) err('tasks', '任务 ID 必须唯一');
+        if (!t || !nonempty(t.id) || ['$planning:pm', '$planning:orchestrator'].includes(t.id) || ids.has(t.id)) err('tasks', '任务 ID 必须唯一');
         ids.add(t?.id)
     }
     for (const t of ts) {

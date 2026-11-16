@@ -80,6 +80,8 @@ export async function callModel(job: Job, stage: 'pm' | 'orchestrator', signal: 
     const context = {
         requirement: job.requirement.text,
         requirementVersion: job.requirement.version,
+        establishedRequirements: job.baseline,
+        requirementProtection: '同一需求版本必须保留 establishedRequirements 中目标、受众、交付物、约束、排除项的原文和全部验收 ID 及原文；允许补充但不能删除或改写。需要改变时先澄清并请用户修改需求，不得借反馈或重生成绕过。旧版本问答只作历史上下文，显式新需求优先。',
         images: job.requirement.images.map(i => ({id: i.id, name: i.name})),
         answers: job.answers,
         previousPlan: job.base,

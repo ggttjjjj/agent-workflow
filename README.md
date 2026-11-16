@@ -47,3 +47,9 @@ src/server/           后端（Node/Express）
 src/shared/domain.ts  前后端共用模型
 tests/                测试
 ```
+## 需求与验收记录
+
+- [MVP 实施说明、缺口修复与剩余验收](docs/implemented/agent-workflow-mvp.md)（已合并原产品基线与缺口修复记录）
+- [Workflow 规划阶段节点实施说明](docs/implemented/workflow-planning-stage-nodes.md)（已实施；真实浏览器及 API 验收待执行）
+
+规划结果保存失败时，已校验结果会保留在 SQLite 路径旁的 `.recovery/` 目录，重试不重复调用模型；备份应用数据时请同时保留该目录。

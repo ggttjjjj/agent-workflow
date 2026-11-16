@@ -1,7 +1,10 @@
 import {useEffect, useState} from 'react';
-import {current, validatePlan, type Workflow, type Plan, type Agent} from '../../shared/domain';
+import {current, defaults, validatePlan, type Workflow, type Plan, type Agent} from '../../shared/domain';
 import Graph, {positions} from './Graph';
 import Inspector from './Inspector';
+import PlanningDetails, {PlanningOverview} from './PlanningDetails';
+import {stageIds, stageOf} from '../../shared/planning';
+import PlanComparison from './PlanComparison';
 import {api} from '../api';
 
 export default function Editor({w, onUpdate, onError}: {
@@ -9,12 +12,17 @@ export default function Editor({w, onUpdate, onError}: {
     onUpdate: (w: Workflow) => void;
     onError: (e: string) => void
 }) {
-    const revision = current(w)!;
+    const saved = current(w);
+    // An empty editing surface contains system stages only, never partial tasks.
+    const revision = saved || {id: '', number: 0, createdAt: '', confirmedAt: undefined, plan: {
+        pm: {goal: '', audience: '', deliverables: [], constraints: [], exclusions: [], assumptions: [], criteria: [], tasks: []},
+        agents: [], rationale: '', model: 'deepseek-flash', effort: 'high', requirementVersion: w.requirement.version, settings: defaults
+    } as Plan};
     const key = 'weave-draft-' + w.id;
     const [draft, setDraft] = useState<Plan>(() => {
         try {
             const d = JSON.parse(localStorage.getItem(key) || 'null');
-            return d?.plan || structuredClone(revision.plan)
+            return saved && d?.plan || structuredClone(revision.plan)
         } catch {
             return structuredClone(revision.plan)
         }
@@ -26,11 +34,18 @@ export default function Editor({w, onUpdate, onError}: {
             return revision.id
         }
     });
-    const [past, setPast] = useState<Plan[]>([]), [future, setFuture] = useState<Plan[]>([]), [tab, setTab] = useState('graph'), [selected, setSelected] = useState(draft.pm.tasks[0]?.id || ''), [stored, setStored] = useState(''), [layout, setLayout] = useState(w.layout), [busy, setBusy] = useState(false);
-    const dirty = JSON.stringify(draft) !== JSON.stringify(revision.plan), conflict = base !== revision.id;
+    const [past, setPast] = useState<Plan[]>([]), [future, setFuture] = useState<Plan[]>([]), [tab, setTab] = useState('graph'), [selected, setSelected] = useState<string>(stageIds.pm), [stored, setStored] = useState(''), [layout, setLayout] = useState(w.layout), [busy, setBusy] = useState(false);
+    const dirty = !!saved && JSON.stringify(draft) !== JSON.stringify(revision.plan), conflict = !!saved && !!base && base !== revision.id;
     const req = w.requirements.find(x => x.version === draft.requirementVersion) || w.requirement,
         findings = validatePlan(draft, req);
     const active = ['analyzing', 'orchestrating'].includes(w.job?.status || '');
+    useEffect(() => {
+        if (selected && !stageOf(selected) && !draft.pm.tasks.some(t => t.id === selected)) setSelected(stageIds.pm);
+    }, [draft.pm.tasks, selected]);
+    useEffect(() => {
+        if (saved && !base) {setDraft(structuredClone(saved.plan)); setBase(saved.id)}
+    }, [saved, base]);
+
     useEffect(() => {
         try {
             if (dirty || conflict) {
@@ -111,12 +126,13 @@ export default function Editor({w, onUpdate, onError}: {
 
     const agentChange = (a: Agent) => change({...draft, agents: draft.agents.map(x => x.id === a.id ? a : x)});
     return <div className="editor">
+        <PlanningOverview w={w}/>
         <div className="editor-head">
             <div><h1>{w.title}</h1><span
-                className="tag">{revision.confirmedAt && !dirty ? '已确认' : '未确认'} · r{revision.number}</span><small
+                className="tag">{saved ? `${revision.confirmedAt && !dirty ? '已确认' : '未确认'} · r${revision.number}` : '规划阶段'}</span><small
                 className={stored.includes('失败') ? 'error' : ''}>{stored}</small>
             </div>
-            <div className="actions">
+            <div className="actions" hidden={!saved}>
                 <button disabled={busy || active || conflict || !dirty || findings.some(f => f.level === 'error')}
                         onClick={() => action('save', {
                             expectedVersion: w.version,
@@ -125,7 +141,7 @@ export default function Editor({w, onUpdate, onError}: {
                         }, true)}>保存方案
                 </button>
                 <button className="primary"
-                        disabled={busy || active || dirty || conflict || !!w.candidate || !!findings.length || draft.requirementVersion !== w.requirement.version || ['waiting', 'issues'].includes(w.job?.status || '')}
+                        disabled={!saved || busy || active || dirty || conflict || !!w.candidate || !!findings.length || draft.requirementVersion !== w.requirement.version || ['waiting', 'issues'].includes(w.job?.status || '')}
                         onClick={() => {
                             if (confirm('我已审查当前已保存方案。')) void action('confirm', {
                                 expectedVersion: w.version,
@@ -167,12 +183,12 @@ export default function Editor({w, onUpdate, onError}: {
                     onClick={adopt}>采用候选
             </button>
         </section>}
-        <nav
+        {saved && <nav
             className="tabs">{[['graph', '编排画布'], ['agents', 'Agent 定义'], ['coverage', '需求覆盖'], ['compare', '版本与候选']].map(([id, name]) =>
             <button key={id} className={tab === id ? 'active' : ''}
-                    onClick={() => setTab(id)}>{name}{id === 'coverage' && findings.length > 0 ? ' · ' + findings.length : ''}</button>)}</nav>
+                    onClick={() => setTab(id)}>{name}{id === 'coverage' && findings.length > 0 ? ' · ' + findings.length : ''}</button>)}</nav>}
         {tab === 'graph' && <>
-            <div className="toolbar">
+            {saved && <div className="toolbar">
                 <button onClick={() => {
                     const id = 'T-' + crypto.randomUUID().slice(0, 6);
                     change({
@@ -208,18 +224,20 @@ export default function Editor({w, onUpdate, onError}: {
                 }}>↷ 重做
                 </button>
                 <button onClick={() => {
-                    const l = positions(draft);
+                    const l = {...layout, ...positions(draft)};
                     setLayout(l);
                     api<Workflow>(`/workflows/${w.id}/layout`, 'PUT', {layout: l}).then(onUpdate).catch(e => onError(e.message))
                 }}>整理布局
                 </button>
-                <span>拖动端口建立依赖 · 选中节点或连线后按 Delete / Backspace 删除（可撤销）</span></div>
-            <div className="workspace"><Graph plan={draft} layout={layout} selected={selected} onSelect={setSelected}
+                <span>拖动端口建立依赖 · 选中节点或连线后按 Delete / Backspace 删除普通任务（可撤销）；系统阶段及虚线不可删除、复制或改接</span></div>}
+            <div className="workspace"><Graph plan={saved ? draft : undefined} job={w.job} viewport={w.viewport} onViewport={viewport => {
+                api<Workflow>(`/workflows/${w.id}/layout`, 'PUT', {viewport}).then(onUpdate).catch(e => onError(e.message))
+            }} layout={layout} selected={selected} onSelect={setSelected}
                                               onLayout={l => {
                                                   setLayout(l);
                                                   api<Workflow>(`/workflows/${w.id}/layout`, 'PUT', {layout: l}).then(onUpdate).catch(e => onError(e.message))
                                               }} onConnect={c => {
-                if (!c.source || !c.target) return;
+                if (!c.source || !c.target || stageOf(c.source) || stageOf(c.target)) return;
                 const target = draft.pm.tasks.find(t => t.id === c.target)!;
                 const p = {
                     ...draft,
@@ -238,11 +256,11 @@ export default function Editor({w, onUpdate, onError}: {
                 taskChange({...target, dependsOn: [...new Set([...target.dependsOn, c.source])]})
             }} onDeleteEdge={(from, to) => {
                 const target = draft.pm.tasks.find(t => t.id === to);
-                if (!target) return;
+                if (!target || stageOf(from) || stageOf(to)) return;
                 taskChange({...target, dependsOn: target.dependsOn.filter(x => x !== from)})
-            }} onDeleteNode={deleteTask}/><Inspector plan={draft} req={req} task={draft.pm.tasks.find(t => t.id === selected)}
+            }} onDeleteNode={deleteTask}/>{stageOf(selected) ? <PlanningDetails key={stageOf(selected)} w={w} stage={stageOf(selected)!} onUpdate={onUpdate} onError={onError}/> : <Inspector plan={draft} req={req} task={draft.pm.tasks.find(t => t.id === selected)}
                                                     onChange={taskChange}
-                                                    onDelete={() => deleteTask(selected)}/></div>
+                                                    onDelete={() => deleteTask(selected)}/>}</div>
         </>}
         {tab === 'agents' && <div className="scroll-content">
             <div className="section-title"><p>角色由编排器按需求生成。</p>
@@ -296,20 +314,24 @@ export default function Editor({w, onUpdate, onError}: {
             <p>{draft.rationale}</p></div>}
         {tab === 'compare' && <div className="scroll-content"><h2>版本与候选比较</h2>
             <p>所有历史确认仅对应原需求与原方案。</p>
-            <div className="compare-grid">
+            {w.candidate ? <PlanComparison before={revision.plan} after={w.candidate}
+                oldRequirement={w.requirements.find(r => r.version === revision.plan.requirementVersion)}
+                newRequirement={w.requirements.find(r => r.version === w.candidate!.requirementVersion)}/>
+                : <p>暂无候选。重新生成后可在此比较。</p>}
+            <details><summary>查看完整方案数据</summary><div className="compare-grid">
                 <section><h3>当前已保存 r{revision.number}</h3>
                     <pre>{JSON.stringify(revision.plan, null, 2)}</pre>
                 </section>
                 <section><h3>候选方案 {w.candidate ? '' : '（暂无）'}</h3>
                     <pre>{w.candidate ? JSON.stringify(w.candidate, null, 2) : '重新生成后可在此比较。'}</pre>
                 </section>
-            </div>
+            </div></details>
             <h3>保存历史</h3>{w.revisions.map(r => <details key={r.id}>
                 <summary>r{r.number} · 需求
                     v{r.plan.requirementVersion} · {new Date(r.createdAt).toLocaleString()} {r.confirmedAt ? '· 已确认' : ''}</summary>
                 <pre>{JSON.stringify(r.plan, null, 2)}</pre>
             </details>)}</div>}
-        {findings.length > 0 && <div className="editor-footer">
+        {saved && findings.length > 0 && <div className="editor-footer">
             <button onClick={() => setTab('coverage')}>{findings.filter(f => f.level === 'error').length} 项结构错误
                 · {findings.filter(f => f.level === 'coverage').length} 项覆盖遗漏</button></div>}
     </div>
