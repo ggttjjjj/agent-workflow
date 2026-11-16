@@ -1,5 +1,6 @@
 import {useState} from 'react';
 import type {Question} from '../../shared/domain';
+import {MAX_QUESTION_OPTIONS} from '../../shared/domain';
 
 const CUSTOM = -1;
 const letter = (index: number) => String.fromCharCode(65 + index);
@@ -10,6 +11,8 @@ export default function Questions({questions, busy, disabled, onSubmit}: {
     disabled?: boolean;
     onSubmit: (answer: string) => void
 }) {
+    // Older saved questions may still contain more choices than the current limit.
+    questions = questions.map(q => ({...q, options: q.options?.slice(0, MAX_QUESTION_OPTIONS)}));
     const [picked, setPicked] = useState<Record<string, number[]>>({});
     const [custom, setCustom] = useState<Record<string, string>>({});
     const [notes, setNotes] = useState('');

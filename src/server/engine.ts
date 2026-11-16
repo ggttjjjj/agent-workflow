@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {Store} from './store.ts';
 import {callModel, ModelError} from './model.ts';
-import {current, validatePlan, type Job, type Plan, type Workflow, type Question} from '../shared/domain.ts';
+import {current, validatePlan, MIN_QUESTION_OPTIONS, MAX_QUESTION_OPTIONS, type Job, type Plan, type Workflow, type Question} from '../shared/domain.ts';
 
 export const active = (j?: Job) => !!j && ['analyzing', 'orchestrating'].includes(j.status);
 const fail = (m: string) => {
@@ -11,7 +11,7 @@ const fail = (m: string) => {
 export function checkQuestions(q: unknown): Question[] {
     if (!Array.isArray(q) || !q.length || q.some(x => !x || typeof x.id !== 'string' || !x.id || typeof x.text !== 'string' || !x.text.trim() || typeof x.reason !== 'string') || new Set(q.map(x => x.id)).size !== q.length) throw new ModelError('澄清问题结构无效', true);
     return (q as Question[]).map(x => {
-        if (!Array.isArray(x.options) || x.options.length < 3 || x.options.length > 5 || x.options.some(o => typeof o !== 'string' || !o.trim())) throw new ModelError('澄清问题候选项无效：每题需 3–5 个非空候选答案', true);
+        if (!Array.isArray(x.options) || x.options.length < MIN_QUESTION_OPTIONS || x.options.length > MAX_QUESTION_OPTIONS || x.options.some(o => typeof o !== 'string' || !o.trim())) throw new ModelError(`澄清问题候选项无效：每题需 ${MIN_QUESTION_OPTIONS}–${MAX_QUESTION_OPTIONS} 个非空候选答案，另由宿主追加 1 个自定义回答`, true);
         const options = x.options.map(o => o.trim());
         if (new Set(options).size !== options.length) throw new ModelError('澄清问题候选项无效：候选答案不能重复', true);
         if (typeof x.multi !== 'boolean') throw new ModelError('澄清问题必须标明单选或多选（multi）', true);

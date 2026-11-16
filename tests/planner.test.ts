@@ -71,73 +71,27 @@ test("valid structure, cycle, dangling assignment and coverage are distinguished
   assert.ok(es.some((e) => e.message.includes("Agent")));
   assert.ok(es.some((e) => e.level === "coverage"));
 });
-test("clarification options are trimmed and require a single/multi mode", () => {
-  const questions = checkQuestions([
-    {
-      id: "Q1",
-      text: "范围？",
-      reason: "必要",
-      multi: false,
-      options: [" 仅内部 ", "公开", "合作方"],
-    },
-  ]);
-  assert.deepEqual(questions[0].options, ["仅内部", "公开", "合作方"]);
-  assert.equal(questions[0].multi, false);
-  assert.equal(
-    checkQuestions([
-      {
-        id: "Q2",
-        text: "资源？",
-        reason: "必要",
-        multi: true,
-        options: ["场地", "志愿者", "预算"],
-      },
-    ])[0].multi,
-    true,
-  );
+test("clarification accepts two or three trimmed options in either selection mode", () => {
+  for (const {options, multi} of [
+    {options: [" 仅内部 ", "公开"], multi: false},
+    {options: [" 场地 ", "志愿者", "预算"], multi: true},
+  ]) {
+    const [question] = checkQuestions([{id: "Q1", text: "范围？", reason: "必要", multi, options}]);
+    assert.deepEqual(question.options, options.map(option => option.trim()));
+    assert.equal(question.multi, multi);
+  }
+});
+test("clarification rejects missing, out-of-range, duplicate choices and missing mode", () => {
+  const question = {id: "Q1", text: "范围？", reason: "必要", multi: false};
+  for (const options of [undefined, ["甲"], ["甲", "乙", "丙", "丁"]]) {
+    assert.throws(() => checkQuestions([{...question, options}]), /候选项/);
+  }
   assert.throws(
-    () =>
-      checkQuestions([
-        { id: "Q1", text: "范围？", reason: "必要", multi: false },
-      ]),
-    /候选项/,
-  );
-  assert.throws(
-    () =>
-      checkQuestions([
-        {
-          id: "Q1",
-          text: "范围？",
-          reason: "必要",
-          multi: false,
-          options: ["只有一个", "第二个"],
-        },
-      ]),
-    /候选项/,
-  );
-  assert.throws(
-    () =>
-      checkQuestions([
-        {
-          id: "Q1",
-          text: "范围？",
-          reason: "必要",
-          multi: false,
-          options: ["重复", "重复", "唯一"],
-        },
-      ]),
+    () => checkQuestions([{...question, options: ["重复", "重复"]}]),
     /重复/,
   );
   assert.throws(
-    () =>
-      checkQuestions([
-        {
-          id: "Q1",
-          text: "范围？",
-          reason: "必要",
-          options: ["甲", "乙", "丙"],
-        },
-      ]),
+    () => checkQuestions([{...question, options: ["甲", "乙"], multi: undefined}]),
     /多选/,
   );
 });

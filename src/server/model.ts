@@ -1,4 +1,5 @@
 import type {Job} from '../shared/domain.ts';
+import {MIN_QUESTION_OPTIONS, MAX_QUESTION_OPTIONS} from '../shared/domain.ts';
 
 export class ModelError extends Error {
     constructor(message: string, public retryable = false) {
@@ -59,7 +60,7 @@ export async function readStream(response: Response, onText: (s: string) => void
     return {result, usage};
 }
 
-const optionRule = '每个问题必须提供 3–5 个具体、清晰、可直接采纳的候选答案，放入 options 字符串数组，只写答案文本，不要自带 A/B/C 或序号；根据问题语义设置 multi：只能选一项时为 false，可同时选多项时为 true。候选答案要短而明确，不要写“其他”“以上都不是”“自定义”这类兜底项，宿主会自动追加字母选项和自定义选项。例如社区活动主题可给 ["环境清洁","助老扶弱","亲子教育","文化营造","社区安全"] 并设 multi=false。';
+const optionRule = `每个问题必须提供 ${MIN_QUESTION_OPTIONS}–${MAX_QUESTION_OPTIONS} 个具体、清晰、可直接采纳的候选答案，最多 ${MAX_QUESTION_OPTIONS} 个，放入 options 字符串数组，只写答案文本，不要自带 A/B/C 或序号；根据问题语义设置 multi：只能选一项时为 false，可同时选多项时为 true。候选答案要短而明确，不要写“其他”“以上都不是”“自定义”这类兜底项，宿主会自动追加字母选项和且仅追加 1 个“自定义回答”选项，每题合计最多 ${MAX_QUESTION_OPTIONS + 1} 个选项。例如社区活动主题可给 ["环境清洁","助老扶弱","亲子教育"] 并设 multi=false。`;
 const pmContract = `返回 json，仅以下两种形式：
 {"kind":"clarify","questions":[{"id":"Q1","text":"问题","reason":"必要原因","multi":false,"options":["候选答案1","候选答案2","候选答案3"]}]}
 或 {"kind":"ready","pm":{"goal":"目标","audience":"受众","deliverables":["交付物"],"constraints":[],"exclusions":[],"assumptions":[],"criteria":[{"id":"C1","text":"必需验收要求"}],"tasks":[{"id":"T1","title":"任务标题","goal":"目标","inputs":[{"kind":"requirement","ref":"spec"}],"outputs":["outputName"],"done":["完成条件"],"criteria":["C1"],"dependsOn":[],"agentId":""}]}}

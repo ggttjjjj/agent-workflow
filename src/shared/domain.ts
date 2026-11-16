@@ -88,6 +88,9 @@ export interface Revision {
     confirmedAt?: string
 }
 
+export const MIN_QUESTION_OPTIONS = 2;
+export const MAX_QUESTION_OPTIONS = 3;
+
 export interface Question {
     id: string;
     text: string;
