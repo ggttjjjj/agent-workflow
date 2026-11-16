@@ -1,1 +1,10 @@
-export async function api<T>(path:string,method='GET',body?:unknown):Promise<T>{const r=await fetch('/api'+path,{method,headers:body?{'Content-Type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw new Error(d.error||'请求失败');return d}
+export async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+    const r = await fetch('/api' + path, {
+        method,
+        headers: body ? {'Content-Type': 'application/json'} : undefined,
+        body: body ? JSON.stringify(body) : undefined
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '请求失败');
+    return d
+}

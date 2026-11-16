@@ -1,10 +1,70 @@
-import type {Plan,Task,Requirement} from '../../shared/domain';
-export default function Inspector({plan,req,task,onChange,onDelete}:{plan:Plan;req:Requirement;task?:Task;onChange:(t:Task)=>void;onDelete:()=>void}){
- if(!task)return <aside className="inspector"><h3>任务详情</h3><p className="hint">选择画布节点，查看目标、输入输出和负责角色。</p></aside>;
- const field=(key:'title'|'goal')=><label className="field">{key==='title'?'任务标题':'任务目标'}<textarea aria-label={key==='title'?'任务标题':'任务目标'} rows={key==='title'?2:3} value={task[key]} onChange={e=>onChange({...task,[key]:e.target.value})}/></label>;
- return <aside className="inspector"><div className="section-title"><h3>任务详情</h3><small>{task.id}</small></div>{field('title')}{field('goal')}<label className="field">主要负责 Agent<select value={task.agentId} onChange={e=>onChange({...task,agentId:e.target.value})}><option value="">请选择</option>{plan.agents.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>{(['outputs','done'] as const).map(k=><label key={k} className="field">{k==='outputs'?'预期输出（每行一项）':'完成条件（每行一项）'}<textarea rows={3} value={task[k].join('\n')} onChange={e=>onChange({...task,[k]:e.target.value.split('\n')})}/></label>)}
- <label className="field">前置依赖<div className="checks">{plan.pm.tasks.filter(x=>x.id!==task.id).map(x=><label key={x.id}><input type="checkbox" checked={task.dependsOn.includes(x.id)} onChange={e=>onChange({...task,dependsOn:e.target.checked?[...task.dependsOn,x.id]:task.dependsOn.filter(id=>id!==x.id)})}/>{x.title}</label>)}</div></label>
- <label className="field">输入来源<div className="inputs">{task.inputs.map((input,i)=><div key={i}><select aria-label={'输入来源'+i} value={JSON.stringify(input)} onChange={e=>onChange({...task,inputs:task.inputs.map((x,j)=>j===i?JSON.parse(e.target.value):x)})}><option value={JSON.stringify(input)}>{input.kind}: {input.ref}{input.output?'.'+input.output:''}</option><option value={JSON.stringify({kind:'requirement',ref:'spec'})}>原始需求</option>{req.images.map(x=><option key={x.id} value={JSON.stringify({kind:'image',ref:x.id})}>图片：{x.name}</option>)}{plan.pm.tasks.filter(x=>task.dependsOn.includes(x.id)).flatMap(x=>x.outputs.map(o=><option key={x.id+o} value={JSON.stringify({kind:'task',ref:x.id,output:o})}>{x.id}.{o}</option>))}</select><button aria-label="移除输入" onClick={()=>onChange({...task,inputs:task.inputs.filter((_,j)=>j!==i)})}>×</button></div>)}</div></label><button className="small" onClick={()=>onChange({...task,inputs:[...task.inputs,{kind:'requirement',ref:'spec'}]})}>＋ 添加输入</button>
- <label className="field">关联验收要求<div className="checks">{plan.pm.criteria.map(c=><label key={c.id}><input type="checkbox" checked={task.criteria.includes(c.id)} onChange={e=>onChange({...task,criteria:e.target.checked?[...task.criteria,c.id]:task.criteria.filter(id=>id!==c.id)})}/>{c.text}</label>)}</div></label>
- <button className="danger" onClick={onDelete}>删除任务</button></aside>
+import type {Plan, Task, Requirement} from '../../shared/domain';
+
+export default function Inspector({plan, req, task, onChange, onDelete}: {
+    plan: Plan;
+    req: Requirement;
+    task?: Task;
+    onChange: (t: Task) => void;
+    onDelete: () => void
+}) {
+    if (!task) return <aside className="inspector"><h3>任务详情</h3><p
+        className="hint">选择画布节点，查看目标、输入输出和负责角色。</p></aside>;
+    const field = (key: 'title' | 'goal') => <label
+        className="field">{key === 'title' ? '任务标题' : '任务目标'}<textarea
+        aria-label={key === 'title' ? '任务标题' : '任务目标'} rows={key === 'title' ? 2 : 3} value={task[key]}
+        onChange={e => onChange({...task, [key]: e.target.value})}/></label>;
+    return <aside className="inspector">
+        <div className="section-title"><h3>任务详情</h3><small>{task.id}</small></div>
+        {field('title')}{field('goal')}<label className="field">主要负责 Agent<select value={task.agentId}
+                                                                                      onChange={e => onChange({
+                                                                                          ...task,
+                                                                                          agentId: e.target.value
+                                                                                      })}>
+        <option value="">请选择</option>
+        {plan.agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+    </select></label>{(['outputs', 'done'] as const).map(k => <label key={k}
+                                                                     className="field">{k === 'outputs' ? '预期输出（每行一项）' : '完成条件（每行一项）'}<textarea
+        rows={3} value={task[k].join('\n')}
+        onChange={e => onChange({...task, [k]: e.target.value.split('\n')})}/></label>)}
+        <label className="field">前置依赖
+            <div className="checks">{plan.pm.tasks.filter(x => x.id !== task.id).map(x => <label key={x.id}><input
+                type="checkbox" checked={task.dependsOn.includes(x.id)} onChange={e => onChange({
+                ...task,
+                dependsOn: e.target.checked ? [...task.dependsOn, x.id] : task.dependsOn.filter(id => id !== x.id)
+            })}/>{x.title}</label>)}</div>
+        </label>
+        <label className="field">输入来源
+            <div className="inputs">{task.inputs.map((input, i) => <div key={i}><select aria-label={'输入来源' + i}
+                                                                                        value={JSON.stringify(input)}
+                                                                                        onChange={e => onChange({
+                                                                                            ...task,
+                                                                                            inputs: task.inputs.map((x, j) => j === i ? JSON.parse(e.target.value) : x)
+                                                                                        })}>
+                <option
+                    value={JSON.stringify(input)}>{input.kind}: {input.ref}{input.output ? '.' + input.output : ''}</option>
+                <option value={JSON.stringify({kind: 'requirement', ref: 'spec'})}>原始需求</option>
+                {req.images.map(x => <option key={x.id} value={JSON.stringify({
+                    kind: 'image',
+                    ref: x.id
+                })}>图片：{x.name}</option>)}{plan.pm.tasks.filter(x => task.dependsOn.includes(x.id)).flatMap(x => x.outputs.map(o =>
+                <option key={x.id + o}
+                        value={JSON.stringify({kind: 'task', ref: x.id, output: o})}>{x.id}.{o}</option>))}</select>
+                <button aria-label="移除输入"
+                        onClick={() => onChange({...task, inputs: task.inputs.filter((_, j) => j !== i)})}>×
+                </button>
+            </div>)}</div>
+        </label>
+        <button className="small"
+                onClick={() => onChange({...task, inputs: [...task.inputs, {kind: 'requirement', ref: 'spec'}]})}>＋ 添加输入
+        </button>
+        <label className="field">关联验收要求
+            <div className="checks">{plan.pm.criteria.map(c => <label key={c.id}><input type="checkbox"
+                                                                                        checked={task.criteria.includes(c.id)}
+                                                                                        onChange={e => onChange({
+                                                                                            ...task,
+                                                                                            criteria: e.target.checked ? [...task.criteria, c.id] : task.criteria.filter(id => id !== c.id)
+                                                                                        })}/>{c.text}</label>)}</div>
+        </label>
+        <button className="danger" onClick={onDelete}>删除任务</button>
+    </aside>
 }

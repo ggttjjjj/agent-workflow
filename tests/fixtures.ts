@@ -1,2 +1,78 @@
-import {defaults,type Plan} from '../shared/domain.ts';
-export const fixture:Plan={model:'deepseek-flash',effort:'high',requirementVersion:1,settings:defaults,rationale:'独立的内容和设计任务共享契约，最后验证。',pm:{goal:'规划客户反馈门户',audience:'客户与员工',deliverables:['交互方案','接口方案'],constraints:['单团队'],exclusions:['支付'],assumptions:[],criteria:[{id:'C1',text:'客户提交与查看反馈'},{id:'C2',text:'员工分类处理'}],tasks:[{id:'T1',title:'定义反馈数据契约',goal:'设计状态与接口',inputs:[{kind:'requirement',ref:'spec'}],outputs:['contracts'],done:['字段与状态清晰'],criteria:['C1','C2'],dependsOn:[],agentId:'A1'},{id:'T2',title:'规划客户提交界面',goal:'规划表单和列表交互',inputs:[{kind:'task',ref:'T1',output:'contracts'}],outputs:['uiPlan'],done:['覆盖错误与空态'],criteria:['C1'],dependsOn:['T1'],agentId:'A2'},{id:'T3',title:'规划员工处理流程',goal:'规划分类与状态更新',inputs:[{kind:'task',ref:'T1',output:'contracts'}],outputs:['servicePlan'],done:['定义处理流转'],criteria:['C2'],dependsOn:['T1'],agentId:'A1'},{id:'T4',title:'设计验收方案',goal:'验证关键交接',inputs:[{kind:'task',ref:'T2',output:'uiPlan'},{kind:'task',ref:'T3',output:'servicePlan'}],outputs:['testPlan'],done:['验收路径完整'],criteria:['C1','C2'],dependsOn:['T2','T3'],agentId:'A3'}]},agents:[{id:'A1',name:'契约设计 Agent',responsibility:'定义数据和接口边界',prompt:'根据需求输出可审查契约，不执行工具。',capabilities:['服务设计']},{id:'A2',name:'交互设计 Agent',responsibility:'客户与员工交互规划',prompt:'根据接口与需求规划页面，不实施。',capabilities:['阅读图片','交互设计']},{id:'A3',name:'验证设计 Agent',responsibility:'验收与交接规划',prompt:'设计可验证的检查，不声称已测试。',capabilities:['验证设计']}]};
+import {defaults, type Plan} from '../shared/domain.ts';
+
+export const fixture: Plan = {
+    model: 'deepseek-flash',
+    effort: 'high',
+    requirementVersion: 1,
+    settings: defaults,
+    rationale: '独立的内容和设计任务共享契约，最后验证。',
+    pm: {
+        goal: '规划客户反馈门户',
+        audience: '客户与员工',
+        deliverables: ['交互方案', '接口方案'],
+        constraints: ['单团队'],
+        exclusions: ['支付'],
+        assumptions: [],
+        criteria: [{id: 'C1', text: '客户提交与查看反馈'}, {id: 'C2', text: '员工分类处理'}],
+        tasks: [{
+            id: 'T1',
+            title: '定义反馈数据契约',
+            goal: '设计状态与接口',
+            inputs: [{kind: 'requirement', ref: 'spec'}],
+            outputs: ['contracts'],
+            done: ['字段与状态清晰'],
+            criteria: ['C1', 'C2'],
+            dependsOn: [],
+            agentId: 'A1'
+        }, {
+            id: 'T2',
+            title: '规划客户提交界面',
+            goal: '规划表单和列表交互',
+            inputs: [{kind: 'task', ref: 'T1', output: 'contracts'}],
+            outputs: ['uiPlan'],
+            done: ['覆盖错误与空态'],
+            criteria: ['C1'],
+            dependsOn: ['T1'],
+            agentId: 'A2'
+        }, {
+            id: 'T3',
+            title: '规划员工处理流程',
+            goal: '规划分类与状态更新',
+            inputs: [{kind: 'task', ref: 'T1', output: 'contracts'}],
+            outputs: ['servicePlan'],
+            done: ['定义处理流转'],
+            criteria: ['C2'],
+            dependsOn: ['T1'],
+            agentId: 'A1'
+        }, {
+            id: 'T4',
+            title: '设计验收方案',
+            goal: '验证关键交接',
+            inputs: [{kind: 'task', ref: 'T2', output: 'uiPlan'}, {kind: 'task', ref: 'T3', output: 'servicePlan'}],
+            outputs: ['testPlan'],
+            done: ['验收路径完整'],
+            criteria: ['C1', 'C2'],
+            dependsOn: ['T2', 'T3'],
+            agentId: 'A3'
+        }]
+    },
+    agents: [{
+        id: 'A1',
+        name: '契约设计 Agent',
+        responsibility: '定义数据和接口边界',
+        prompt: '根据需求输出可审查契约，不执行工具。',
+        capabilities: ['服务设计']
+    }, {
+        id: 'A2',
+        name: '交互设计 Agent',
+        responsibility: '客户与员工交互规划',
+        prompt: '根据接口与需求规划页面，不实施。',
+        capabilities: ['阅读图片', '交互设计']
+    }, {
+        id: 'A3',
+        name: '验证设计 Agent',
+        responsibility: '验收与交接规划',
+        prompt: '设计可验证的检查，不声称已测试。',
+        capabilities: ['验证设计']
+    }]
+};

@@ -1,1 +1,32 @@
+# Dependencies and package manager caches
+node_modules/
+.pnpm-store/
+
+# Build output and tool caches
+/dist/
+.vite/
+*.tsbuildinfo
+
+# Local environment variables and secrets
 .env
+.env.*
+!.env.example
+!.env.*.example
+
+# Local application data (SQLite database, WAL and shared memory)
+/data/
+
+# Logs and test coverage
+*.log
+/coverage/
+.nyc_output/
+
+# Editor and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.codex/
