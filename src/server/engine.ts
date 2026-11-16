@@ -10,7 +10,13 @@ const fail = (m: string) => {
 
 export function checkQuestions(q: unknown): Question[] {
     if (!Array.isArray(q) || !q.length || q.some(x => !x || typeof x.id !== 'string' || !x.id || typeof x.text !== 'string' || !x.text.trim() || typeof x.reason !== 'string') || new Set(q.map(x => x.id)).size !== q.length) throw new ModelError('澄清问题结构无效', true);
-    return q
+    return (q as Question[]).map(x => {
+        if (!Array.isArray(x.options) || x.options.length < 3 || x.options.length > 5 || x.options.some(o => typeof o !== 'string' || !o.trim())) throw new ModelError('澄清问题候选项无效：每题需 3–5 个非空候选答案', true);
+        const options = x.options.map(o => o.trim());
+        if (new Set(options).size !== options.length) throw new ModelError('澄清问题候选项无效：候选答案不能重复', true);
+        if (typeof x.multi !== 'boolean') throw new ModelError('澄清问题必须标明单选或多选（multi）', true);
+        return {...x, options}
+    })
 }
 
 export class Engine {

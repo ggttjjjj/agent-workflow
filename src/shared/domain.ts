@@ -91,7 +91,9 @@ export interface Revision {
 export interface Question {
     id: string;
     text: string;
-    reason: string
+    reason: string;
+    options?: string[];
+    multi?: boolean
 }
 
 export interface Job {

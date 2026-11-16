@@ -2,6 +2,7 @@ import {useEffect, useState} from 'react';
 import {api} from './api';
 import InputPanel from './components/InputPanel';
 import SettingsPanel from './components/SettingsPanel';
+import Questions from './components/Questions';
 import Editor from './components/Editor';
 import {formatUsage} from './usage';
 import {current, type Workflow, type Picture} from '../shared/domain';
@@ -26,7 +27,7 @@ export default function App() {
     }[]>([]), [w, setW] = useState<Workflow>(), [id, setId] = useState(''), [settings, setSettings] = useState(false), [meta, setMeta] = useState({
         configured: false,
         model: 'deepseek-flash'
-    }), [error, setError] = useState(''), [busy, setBusy] = useState(false), [requirementOpen, setRequirementOpen] = useState(false), [answer, setAnswer] = useState(''), [feedback, setFeedback] = useState(''), [search, setSearch] = useState('');
+    }), [error, setError] = useState(''), [busy, setBusy] = useState(false), [requirementOpen, setRequirementOpen] = useState(false), [feedback, setFeedback] = useState(''), [search, setSearch] = useState('');
     const refresh = () => api<typeof list>('/workflows').then(setList).catch(e => setError(e.message));
     useEffect(() => {
         void refresh();
@@ -106,8 +107,7 @@ export default function App() {
                                                                                                        className={id === x.id ? 'selected' : ''}
                                                                                                        onClick={() => {
                                                                                                            setId(x.id);
-                                                                                                           setError('');
-                                                                                                           setAnswer('')
+                                                                                                           setError('')
                                                                                                        }}>
                 <strong>{x.title}</strong><span>{x.confirmed ? '已确认' : '待审查'} · {new Date(x.updatedAt).toLocaleDateString()}</span>
             </button>)}{!list.length && <p className="hint">你的编排方案将保存在这里。</p>}</div>
@@ -160,22 +160,15 @@ export default function App() {
                     {w.job.error &&
                         <p className="error">{w.job.error}</p>}{w.job.requirement.version !== w.requirement.version &&
                     <p className="warning">本次请求对应旧需求，结果不会覆盖最新方案；请针对最新需求重生成。</p>}{w.job.issues.map((x, i) =>
-                    <p key={i} className="warning">{x}</p>)}{['waiting', 'issues'].includes(w.job.status) && <>
-                    <div className="questions">{w.job.questions.map(q => <div key={q.id}><strong>{q.text}</strong>
-                        <p>{q.reason}</p></div>)}</div>
-                    <textarea aria-label="澄清回答" placeholder="逐项回答这些问题，已确认的信息无需重复。" value={answer}
-                              onChange={e => setAnswer(e.target.value)}/>
-                    <button className="primary"
-                            disabled={busy || !answer.trim() || w.job.requirement.version !== w.requirement.version}
-                            onClick={async () => {
-                                await invoke(() => api(`/workflows/${w.id}/retry`, 'POST', {
-                                    expectedVersion: w.version,
-                                    answer
-                                }));
-                                setAnswer('')
-                            }}>提交回答并继续分析
-                    </button>
-                </>}{generating && <details>
+                    <p key={i} className="warning">{x}</p>)}{['waiting', 'issues'].includes(w.job.status) &&
+                    <Questions key={w.job.id} questions={w.job.questions} busy={busy}
+                               disabled={w.job.requirement.version !== w.requirement.version}
+                               onSubmit={answer => {
+                                   void invoke(() => api(`/workflows/${w.id}/retry`, 'POST', {
+                                       expectedVersion: w.version,
+                                       answer
+                                   }))
+                               }}/>}{generating && <details>
                     <summary>查看流式结果预览（尚未校验）</summary>
                     <pre>{w.job.preview || '正在等待模型输出…'}</pre>
                 </details>}</section>}
