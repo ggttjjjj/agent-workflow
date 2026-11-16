@@ -13,7 +13,11 @@ cp .env.example .env
 npm run dev
 ```
 
-打开 http://127.0.0.1:4310 。本机依赖已安装时也可双击 `start.command`。修改 `.env` 后重启服务。没有密钥时可保存需求、查看与编辑已有方案，但不能进行真实 AI 生成。设置页不接收或暴露密钥。
+推荐统一使用 npm 安装依赖，保留 `package-lock.json`；后续干净安装可运行 `npm ci`。不要在同一个 `node_modules` 目录混用 npm 与 pnpm。若此前用 pnpm 安装后，`npm install` 报 `Cannot read properties of null (reading 'matches')`，先将现有 `node_modules` 移至项目外备份，再运行 `npm install`，无需删除 `.env` 或 `data`。
+
+打开 http://127.0.0.1:3000 。本机依赖已安装时也可双击 `start.command`。修改 `.env` 后重启服务。没有密钥时可保存需求、查看与编辑已有方案，但不能进行真实 AI 生成。设置页不接收或暴露密钥。
+
+服务固定读取项目根目录下的 `.env`，不受启动时工作目录影响；已设置的系统/启动命令环境变量优先于 `.env`。默认端口为 `3000`，可在 `.env` 中用 `PORT=8080` 等有效端口覆盖。`DATA_PATH` 的相对路径也以项目根目录为基准。
 
 生产构建与启动：
 

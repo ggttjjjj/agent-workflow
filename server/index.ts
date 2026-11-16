@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import {loadConfig, projectRoot} from './config.ts';
 import express from 'express';
 import {randomUUID} from 'node:crypto';
 import {resolve} from 'node:path';
@@ -7,7 +7,8 @@ import {Store} from './store.ts';
 import {Engine, active} from './engine.ts';
 import {defaults, current, validatePlan, validateSettings, type Picture, type Workflow} from '../shared/domain.ts';
 
-const app = express(), store = new Store(process.env.DATA_PATH || resolve('data/weave.sqlite')),
+const {port, dataPath} = loadConfig();
+const app = express(), store = new Store(dataPath),
     engine = new Engine(store);
 app.use((req, res, next) => {
     const origin = req.get('origin');
@@ -158,15 +159,14 @@ app.get('/api/workflows/:id/events', (q, r) => {
 });
 app.use('/api', (_q, _r, next) => next(Object.assign(new Error('接口不存在'), {status: 404})));
 if (process.argv.includes('--production')) {
-    app.use(express.static(resolve('dist')));
-    app.get('/{*path}', (_q, r) => r.sendFile(resolve('dist/index.html')))
+    app.use(express.static(resolve(projectRoot, 'dist')));
+    app.get('/{*path}', (_q, r) => r.sendFile(resolve(projectRoot, 'dist/index.html')))
 } else {
     const {createServer} = await import('vite');
-    const vite = await createServer({server: {middlewareMode: true}, appType: 'spa'});
+    const vite = await createServer({root: projectRoot, server: {middlewareMode: true}, appType: 'spa'});
     app.use(vite.middlewares)
 }
 app.use((e: any, _q: express.Request, r: express.Response, _n: express.NextFunction) => {
     r.status(e.status || 500).json({error: e.status ? e.message : '操作失败，原方案仍保留；请重试或检查本地存储'})
 });
-const port = Number(process.env.PORT || 4310);
 app.listen(port, '127.0.0.1', () => console.log(`织序 / WEAVE: http://127.0.0.1:${port}`));
