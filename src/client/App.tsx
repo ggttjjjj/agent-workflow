@@ -5,9 +5,11 @@ import SettingsPanel from './components/SettingsPanel';
 import Editor from './components/Editor';
 import PlanPanel from './components/PlanPanel';
 import Regenerate from './components/Regenerate';
+import Icon from './components/Icon';
 import {current, type Workflow, type Picture, type PlanLists} from '../shared/domain';
 
 export default function App() {
+    const [sidebarOpen, setSidebarOpen] = useState(false);
     const [lists, setLists] = useState<PlanLists>({plans: [], trash: []}), [w, setW] = useState<Workflow>(), [id, setId] = useState(''), [settings, setSettings] = useState(false), [meta, setMeta] = useState({
         configured: false,
         model: 'deepseek-flash'
@@ -98,29 +100,36 @@ export default function App() {
         }))
     }
 
-    return <div className="app">
-        <aside className="sidebar"><a className="brand" href="#" onClick={e => {
+    return <div className={`app${sidebarOpen ? ' sidebar-open' : ''}`}>
+        {sidebarOpen && <button className="sidebar-backdrop" aria-label="关闭导航" onClick={() => setSidebarOpen(false)}/>}
+        <aside className="sidebar" id="app-sidebar" aria-label="方案导航"><a className="brand" href="#" onClick={e => {
             e.preventDefault();
             setId('')
-        }}><b>〃</b><span>织序 / WEAVE<small>本地 AI 工作流规划</small></span></a>
+        }}><b>〃</b><span>织序 <em>weave</em><small>让每个想法，有序发生</small></span></a>
             <PlanPanel lists={lists} currentId={id} onLists={setLists} onDeleted={forget}
-                       onSelect={next => {setId(next); setError('')}}
-                       onCreate={() => {setId(''); setError('')}}/>
+                       onSelect={next => {setId(next); setError(''); setSidebarOpen(false)}}
+                       onCreate={() => {setId(''); setError(''); setSidebarOpen(false)}}/>
             <div className="sidebar-bottom">
-                <button onClick={() => setSettings(true)}>⚙ 设置</button>
+                <button onClick={() => setSettings(true)}><Icon name="settings" size={18}/> 设置</button>
                 <span className={meta.configured ? 'success' : 'muted'}>{meta.configured ? '● 已配置' : '○ 未配置'}</span>
             </div>
         </aside>
         <main>
+            <header className="app-topbar">
+                <button className="mobile-menu" aria-label="切换方案导航" aria-expanded={sidebarOpen} aria-controls="app-sidebar" onClick={() => setSidebarOpen(!sidebarOpen)}><Icon name="menu"/></button>
+                <span className="topbar-title">{id ? '方案工作台' : '新建方案'}<span className="topbar-divider">/</span><span className="topbar-subtitle">AI 工作流规划</span></span>
+                <span className="local-badge"><i/> 本地工作空间</span>
+            </header>
             {error && <div role="alert" className="global-error"><span>{error}</span><button onClick={() => setError('')}>×</button></div>}
             {!id ? <div className="welcome">
                 <div className="welcome-heading">
-                    <div className="line-symbol">〃</div>
-                    <h1>把想法，编排成方案。</h1><p>从一份需求出发，让 AI 拆解任务、组织角色，<br/>再由你审查和决定。</p>
+                    <div className="welcome-eyebrow"><Icon name="sparkles" size={17}/> 从灵感，到清晰的下一步</div>
+                    <h1>嗨，今天想规划些什么？</h1><p>说说你的想法，织序帮你拆解任务、编排角色。<br/>让复杂的事，从一个简单的开始。 </p>
                 </div>
                 {!meta.configured && <div className="warning">尚未配置密钥：在项目 .env 中设置 DEEPSEEK_API_KEY 后重启服务。</div>}
                 <InputPanel onSubmit={create} busy={busy} label={meta.configured ? '开始 AI 规划' : '保存需求'}/>
-                <div className="welcome-foot"><span>01 分析需求</span><span>02 编排角色</span><span>03 人工确认</span></div>
+                <div className="welcome-foot"><span><b>01</b> 分析需求</span><i/> <span><b>02</b> 编排角色</span><i/><span><b>03</b> 人工确认</span></div>
+                <p className="welcome-disclaimer">AI 辅助规划，决策始终由你掌握</p>
             </div> : !w ? <div className="empty">正在打开方案…</div> : <>
                 <div className="requirement-bar">
                     <span>需求 v{w.requirement.version} · {w.requirement.images.length} 张图片</span>

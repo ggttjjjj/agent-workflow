@@ -1,5 +1,12 @@
 import {useState} from 'react';
 import type {Picture, Requirement} from '../../shared/domain';
+import Icon from './Icon';
+
+const examples = [
+    {title: '策划一场活动', text: '为社区策划一场90分钟的亲子阅读活动，需要活动流程、场地安排和预算方案。'},
+    {title: '拆解产品需求', text: '为一款个人阅读管理应用拆解产品需求，规划核心功能、开发任务和验收标准。'},
+    {title: '制定学习计划', text: '制定一份为期4周的前端入门学习计划，每天投入1小时，需要阶段目标、练习任务和成果检查。'}
+];
 
 export default function InputPanel({initial, onSubmit, busy, label = '开始 AI 规划'}: {
     initial?: Requirement;
@@ -29,28 +36,37 @@ export default function InputPanel({initial, onSubmit, busy, label = '开始 AI 
         }
     }
 
-    return <div className="input-panel" onPaste={e => {
+    return <div className="input-panel">
+        <form className="composer" onSubmit={e => {
+            e.preventDefault();
+            if (!busy && (text.trim() || images.length)) onSubmit(text, images)
+        }} onPaste={e => {
         const files = [...e.clipboardData.items].filter(i => i.kind === 'file').map(i => i.getAsFile()!).filter(Boolean);
         if (files.length) {
             e.preventDefault();
             void add(files)
         }
     }}>
-        <label className="field">你的需求<textarea aria-label="需求描述" rows={8}
-                                                                 placeholder="描述你的目标、交付物和约束。例如：为社区策划一场90分钟的亲子阅读活动，需要活动流程、场地安排和预算方案。"
-                                                                 value={text} onChange={e => setText(e.target.value)}/></label>
-        <div className="upload-row"><label className="button upload">＋ 添加参考图片<input type="file"
+        <label className="field composer-field"><span className="sr-only">你的需求</span><textarea aria-label="需求描述" rows={4}
+                 placeholder="描述你想完成的事，或粘贴需求与参考资料…"
+                 onKeyDown={e => {if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {e.preventDefault(); e.currentTarget.form?.requestSubmit()}}}
+                 value={text} onChange={e => setText(e.target.value)}/></label>
+        {images.length > 0 && <div className="pictures">{images.map(i => <div key={i.id}><img src={i.data} alt={i.name}/>
+            <button type="button" aria-label={'移除' + i.name} onClick={() => setImages(images.filter(x => x.id !== i.id))}>×</button>
+            <small>{i.name}</small></div>)}</div>}
+        {error && <p role="alert" className="error">{error}</p>}
+        <div className="composer-toolbar">
+        <div className="upload-row"><label className="button upload"><Icon name="image" size={17}/> <span>参考图片</span><input aria-label="添加参考图片" type="file"
                                                                                           accept="image/png,image/jpeg,image/webp,image/gif"
                                                                                           multiple onChange={e => {
             void add([...e.target.files || []]);
             e.target.value = ''
-        }}/></label><span>也可直接粘贴图片 · 最多12张</span></div>
-        <div className="pictures">{images.map(i => <div key={i.id}><img src={i.data} alt={i.name}/>
-            <button aria-label={'移除' + i.name} onClick={() => setImages(images.filter(x => x.id !== i.id))}>×</button>
-            <small>{i.name}</small></div>)}</div>
-        {error && <p role="alert" className="error">{error}</p>}<p className="hint">文本与图片将发送给 DeepSeek
-        分析。</p>
-        <button className="primary" disabled={busy || (!text.trim() && !images.length)}
-                onClick={() => onSubmit(text, images)}>{busy ? '正在提交…' : label + ' →'}</button>
+        }}/></label><span className="composer-capability">支持粘贴图片</span></div>
+        <button type="submit" className="primary composer-submit" disabled={busy || (!text.trim() && !images.length)}
+                aria-label={busy ? '正在提交…' : label}><span>{busy ? '正在提交…' : label}</span><Icon name="arrow" size={19}/></button>
+        </div>
+        </form>
+        <div className="composer-help"><span>文本与图片将发送给 DeepSeek 分析</span><span>Ctrl / ⌘ + Enter 提交</span></div>
+        {!initial && <div className="starter-prompts" aria-label="需求灵感">{examples.map(example => <button type="button" key={example.title} disabled={busy} onClick={() => {setText(example.text); document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus()}}><Icon name="plus" size={15}/>{example.title}</button>)}</div>}
     </div>
 }

@@ -5,13 +5,13 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  color: #191d39;
+  color: #25262b;
   background: #fff;
   font-synthesis: none;
   font-size: 14px;
-  --primary: #4536d6;
-  --border: #e2e4ed;
-  --muted: #85899e;
+  --primary: #4d6bfe;
+  --border: #e8e9ed;
+  --muted: #8b8e98;
 }
 * {
   box-sizing: border-box;
@@ -51,7 +51,7 @@ button.primary {
   box-shadow: 0 3px 8px #4536d619;
 }
 button.primary:hover {
-  background: #3627bd;
+  background: #3b58ec;
 }
 input,
 textarea,
@@ -1535,3 +1535,113 @@ summary {
 .planning-details small {font-size:11px; color:#667b83}
 .actions[hidden] {display:none}
 @media(max-width:760px) {.planning-details {width:100%}.planning-overview {padding:12px 16px}}
+
+/* Reference-inspired shell. Workflow canvas and review mechanics remain intact. */
+button:focus-visible, a:focus-visible, .upload:focus-within {
+  outline: 3px solid #4d6bfe66;
+  outline-offset: 3px;
+}
+button:hover, .button:hover {background:#f0f3ff; border-color:#cdd6ff}
+button.primary {box-shadow:none}
+input:focus, textarea:focus, select:focus {outline-color:#b9c6ff}
+.sr-only {position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0}
+.sidebar {width:260px; padding:30px 16px 18px; background:#f9fafb; border-right:1px solid #f0f0f2}
+.brand {gap:10px; margin:0 10px 36px; font-size:23px; letter-spacing:-.8px}
+.brand b {width:35px; height:35px; color:var(--primary); background:transparent; box-shadow:none; font-size:44px; border-radius:0}
+.brand em {font-style:normal; font-size:20px; color:var(--primary); font-weight:600; letter-spacing:-.6px; margin-left:3px}
+.brand small {font-size:11px; color:#92949e; letter-spacing:1px; margin-top:4px}
+.plan-panel > .section-title {gap:8px; padding:0 6px}
+.plan-panel > .section-title h3 {font-size:12px; font-weight:500; color:#858893}
+.plan-panel .plan-tabs {margin-top:18px; background:#eff0f3; padding:4px; border-radius:10px}
+.plan-tabs button {padding:7px 4px; font-size:12px}
+.plan-tabs button.active {color:#344dac}
+.plan-panel .search {background:#fff; border-color:#e9eaf0; border-radius:10px; font-size:12px; padding:11px 12px; margin:14px 0 12px}
+.plan-item {border-radius:10px; margin:4px 0}
+.plan-item:hover {background:#eff1f5}
+.plan-item.selected {background:#e7edff; box-shadow:none}
+.plan-item.selected .plan-open strong {color:#3455c7}
+.plan-open strong {font-weight:500}
+.sidebar-bottom {border-top:1px solid #e9eaee; padding-top:16px}
+.sidebar-bottom button {display:inline-flex; align-items:center; gap:8px; background:transparent; border:0; color:#646874}
+.sidebar-bottom > span {font-size:11px}
+.app-topbar {height:66px; padding:0 36px; display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid #f3f3f5}
+.topbar-title {color:#484b55; font-size:13px; display:flex; align-items:center; gap:13px}
+.topbar-divider {color:#d4d6de}
+.topbar-subtitle {color:#9296a2; font-size:12px}
+.local-badge {display:flex; align-items:center; gap:7px; color:#8c909a; font-size:11px; white-space:nowrap}
+.local-badge i {width:6px; height:6px; border-radius:50%; background:#50a680}
+.mobile-menu, .sidebar-backdrop {display:none}
+.welcome {max-width:844px; margin:0 auto; padding:clamp(70px,15vh,155px) 40px 32px}
+.welcome-heading {margin-bottom:32px}
+.welcome-eyebrow {display:flex; align-items:center; justify-content:center; gap:8px; color:var(--primary); font-size:12px; letter-spacing:1px; margin-bottom:21px}
+.welcome h1 {font-size:32px; font-weight:600; letter-spacing:-1px; color:#25262b; margin-bottom:17px}
+.welcome-heading p {font-size:14px; color:#92949f; line-height:1.9; margin-bottom:0}
+.welcome > .warning {background:#fff9ed; border:1px solid #f0e5cb; color:#99753a; border-radius:10px; font-size:12px; padding:11px 15px; line-height:1.7; margin-bottom:16px}
+.composer {background:#f7f8fa; border:1px solid #eceef2; border-radius:24px; padding:18px 18px 14px; transition:border-color .2s,box-shadow .2s,background .2s}
+.composer:focus-within {border-color:#b7c5ff; box-shadow:0 4px 24px #4d6bfe0a; background:#fafbff}
+.composer .composer-field {margin:0}
+.composer .composer-field textarea {margin:0; padding:0 3px; min-height:112px; max-height:360px; border:0; background:transparent; border-radius:0; font-size:15px; line-height:1.85; color:#30333b; resize:vertical; box-shadow:none}
+.composer .composer-field textarea:focus {outline:none}
+.composer textarea::placeholder {color:#a1a4ae}
+.composer-toolbar {display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:16px}
+.composer .upload-row {display:flex; align-items:center; gap:12px; margin:0; flex-wrap:wrap}
+.composer .upload {position:relative; display:inline-flex; align-items:center; gap:6px; padding:7px 11px; border-radius:20px; background:#fff; border:1px solid #e4e6ec; font-size:12px; color:#666b78; overflow:hidden; cursor:pointer}
+.composer .upload input {position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; display:block}
+.composer-capability {font-size:11px; color:#a1a4ad}
+.composer .composer-submit {display:inline-flex; align-items:center; justify-content:center; gap:8px; border-radius:20px; padding:9px 13px; min-height:38px; font-size:12px; white-space:nowrap; flex:none}
+.composer-submit:disabled {background:#dfe4f5; border-color:#dfe4f5; color:#fff; opacity:1}
+.composer .pictures {margin:10px 0 0; gap:10px}
+.composer .pictures > div {background:white; border-radius:12px}
+.composer-help {display:flex; justify-content:space-between; gap:12px; margin:11px 10px 0; color:#a1a4ad; font-size:10px; line-height:1.6}
+.starter-prompts {display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-top:27px}
+.starter-prompts button {display:inline-flex; align-items:center; gap:7px; padding:9px 13px; border-radius:20px; border-color:#eceef2; color:#797e8a; font-size:12px}
+.starter-prompts svg {color:#939bad}
+.welcome-foot {display:flex; justify-content:center; align-items:center; gap:16px; margin-top:54px; padding:0; border:0; color:#9ca0aa; font-size:11px}
+.welcome-foot span {display:flex; align-items:center; gap:7px}
+.welcome-foot b {font-size:10px; color:#a3b1dc; font-weight:500}
+.welcome-foot i {width:26px; height:1px; background:#e6e9f0}
+.welcome .welcome-disclaimer {font-size:10px; color:#b1b4bd; text-align:center; margin:23px 0 0}
+.requirement-bar {background:#fff; border-bottom:1px solid var(--border); color:#858a98}
+.editor-head {background:#fff}
+.tabs button.active {color:var(--primary); border-bottom-color:var(--primary)}
+.modal {border-radius:20px; box-shadow:0 24px 80px #1c2a4a20}
+@media (min-width:761px) {.workspace {height:calc(100vh - 320px); min-height:420px}}
+@media (max-width:1000px) and (min-width:761px) {
+  .sidebar {width:230px; padding-inline:12px}
+  .welcome {padding-inline:28px}
+  .welcome h1 {font-size:28px}
+  .app-topbar {padding-inline:25px}
+  .composer-capability {display:none}
+}
+@media (max-width:760px) {
+  .app {display:block}
+  .sidebar {display:flex; position:fixed; left:0; top:0; bottom:0; width:270px; height:100dvh; padding:27px 16px 18px; transform:translateX(-100%); transition:transform .2s; z-index:60; box-shadow:10px 0 40px #26344f12}
+  .sidebar-open .sidebar {transform:translateX(0)}
+  .sidebar .project-list {display:block; overflow:auto; max-height:none; flex:1}
+  .sidebar .plan-panel {min-height:0; flex:1}
+  .sidebar .brand {display:flex; margin-bottom:32px}
+  .sidebar .plan-tabs {display:flex}
+  .sidebar .generation {display:block}
+  .sidebar-backdrop {display:block; position:fixed; inset:0; width:100%; height:100dvh; border:0; border-radius:0; background:#15213744; z-index:50}
+  .sidebar-backdrop:hover {background:#15213744}
+  .app-topbar {height:60px; padding:0 18px; justify-content:flex-start}
+  .mobile-menu {display:grid; place-items:center; border:0; padding:6px; background:transparent; color:#737b8d}
+  .local-badge {margin-left:auto; font-size:10px}
+  .topbar-subtitle, .topbar-divider {display:none}
+  .welcome {margin:0 auto; padding:80px 20px 30px}
+  .welcome h1 {font-size:25px; letter-spacing:-.6px}
+  .welcome-heading p {font-size:12px}
+  .welcome-eyebrow {font-size:11px}
+  .composer {padding:16px 14px 12px; border-radius:20px}
+  .composer .composer-field textarea {font-size:14px; min-height:122px}
+  .composer-capability {display:none}
+  .composer-help {font-size:9px; margin-inline:4px}
+  .starter-prompts {gap:7px; margin-top:23px}
+  .starter-prompts button {font-size:11px; padding:8px 10px}
+  .welcome-foot {gap:10px; margin-top:42px}
+  .welcome-foot i {width:14px}
+  .modal {padding:22px; max-height:90dvh}
+}
+@media (prefers-reduced-motion:reduce) {
+  .sidebar, .composer, button {transition:none}
+}
