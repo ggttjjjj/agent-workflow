@@ -1,4 +1,4 @@
-import {useEffect, useState, type ReactNode} from 'react';
+import {useEffect, useRef, useState, type ReactNode} from 'react';
 import {current, defaults, validatePlan, type Workflow, type Plan, type Agent} from '../../shared/domain';
 import Graph, {positions} from './Graph';
 import Inspector from './Inspector';
@@ -8,7 +8,11 @@ import PlanComparison from './PlanComparison';
 import {api} from '../api';
 import {confirmState, saveState} from '../editorState';
 import Icon from './Icon';
+import Presence from './Presence';
 import FloatingNotice from './FloatingNotice';
+import Dialog, {dialogIsOpen, useConfirm} from './Dialog';
+import {questionRoundKey} from '../questionState';
+import {updateDependency, type Dependency} from '../dependencies';
 
 type Notice = {text: string; tone: 'saved' | 'confirmed'; requirementVersion: number};
 
@@ -19,8 +23,13 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
     regenerate: ReactNode
 }) {
     const [detailsOpen, setDetailsOpen] = useState(false), [focusMode, setFocusMode] = useState(false);
+    const ask = useConfirm();
+    const seenQuestions = useRef(new Set<string>());
+    const [pendingQuestions, setPendingQuestions] = useState('');
+    const round = questionRoundKey(w);
+    const waiting = !!w.job && ['waiting', 'issues'].includes(w.job.status) && w.job.requirement.version === w.requirement.version;
     useEffect(() => {
-        const escape = (event: KeyboardEvent) => {if (event.key === 'Escape') {setFocusMode(false); setDetailsOpen(false)}};
+        const escape = (event: KeyboardEvent) => {if (event.key === 'Escape' && !dialogIsOpen()) setFocusMode(false)};
         window.addEventListener('keydown', escape);
         return () => window.removeEventListener('keydown', escape)
     }, []);
@@ -67,6 +76,18 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
     });
     const saveUi = saveState({saving, busy, active, conflict, dirty, findings});
     useEffect(() => {
+        if (!waiting) {setPendingQuestions(''); return}
+        const open = () => {
+            if (seenQuestions.current.has(round)) return;
+            if (dialogIsOpen()) {setPendingQuestions(round); return}
+            seenQuestions.current.add(round); setPendingQuestions('');
+            setSelected(stageIds[w.job!.stage === 'pm' ? 'pm' : 'orchestrator']); setDetailsOpen(true)
+        };
+        const timer = window.setTimeout(open, 0);
+        window.addEventListener('weave-dialog-change', open);
+        return () => {clearTimeout(timer); window.removeEventListener('weave-dialog-change', open)}
+    }, [waiting, round]);
+    useEffect(() => {
         if (selected && !stageOf(selected) && !draft.pm.tasks.some(t => t.id === selected)) setSelected(stageIds.pm);
     }, [draft.pm.tasks, selected]);
     useEffect(() => {
@@ -106,6 +127,12 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
 
     function taskChange(t: Plan['pm']['tasks'][number]) {
         change({...draft, pm: {...draft.pm, tasks: draft.pm.tasks.map(x => x.id === t.id ? t : x)}})
+    }
+
+    function editDependency(previous: Dependency, next?: Dependency) {
+        const result = updateDependency(draft, previous, next);
+        if (!result.error && result.plan !== draft) change(result.plan);
+        return result.error
     }
 
     function editNode(id: string) {
@@ -169,7 +196,7 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
 
     async function confirmPlan() {
         if (!saved || confirmUi.disabled) return;
-        if (!confirm('我已审查当前已保存方案。')) return;
+        if (!await ask('我已审查当前已保存方案。', {title: '确认方案', confirmLabel: '确认已审查'})) return;
         setConfirming(true);
         try {
             const ok = await action('confirm', {
@@ -208,13 +235,15 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
         }
     }
 
-    function adopt() {
-        if (dirty && !confirm('采用候选将替换当前编辑草稿，旧的已保存方案仍保留。继续？')) return;
+    async function adopt() {
+        if (dirty && !await ask('采用候选将替换当前编辑草稿，旧的已保存方案仍保留。继续？', {title: '替换当前草稿？', danger: true})) return;
         void action('candidate', {expectedVersion: w.version, accept: true}, true)
     }
 
     const agentChange = (a: Agent) => change({...draft, agents: draft.agents.map(x => x.id === a.id ? a : x)});
     return <div className="editor">
+        <Presence>{pendingQuestions && waiting && <FloatingNotice onClose={() => {seenQuestions.current.add(round); setPendingQuestions('')}}>有新的问题需要回答，关闭当前弹窗后将自动打开。</FloatingNotice>}</Presence>
+        {waiting && <button className="pending-question-entry" onClick={() => {seenQuestions.current.add(round); setPendingQuestions(''); editNode(stageIds[w.job!.stage === 'pm' ? 'pm' : 'orchestrator'])}}>需求待澄清 · 回答问题</button>}
         <div className="editor-head">
             <div><h1>{w.title}</h1><span className="tag"
                 title={revision.confirmedAt ? `确认于 ${new Date(revision.confirmedAt).toLocaleString()}` : undefined}>{saved ? `${confirmed && !dirty ? '已确认' : '未确认'} · r${revision.number}` : '规划阶段'}</span><small
@@ -229,13 +258,13 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
                         onClick={() => void confirmPlan()}>{confirmUi.label}</button>
             </div>
         </div>
-        {notice && notice.requirementVersion === w.requirement.version &&
+        <Presence>{notice && notice.requirementVersion === w.requirement.version &&
         <FloatingNotice tone={notice.tone === 'confirmed' ? 'success' : 'info'} onClose={() => setNotice(undefined)}>
             {notice.text}
-        </FloatingNotice>}
+        </FloatingNotice>}</Presence>
         {conflict && <div className="warning">草稿基础版本与当前方案冲突，双方内容均保留。
-            <button onClick={() => {
-                if (confirm('丢弃本地草稿并加载当前已保存方案？')) reset()
+            <button onClick={async () => {
+                if (await ask('丢弃本地草稿并加载当前已保存方案？', {title: '放弃本地草稿？', danger: true})) reset()
             }}>使用已保存方案
             </button>
             <button onClick={() => {
@@ -320,7 +349,9 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
                 <button aria-label="节点属性" title="节点属性" aria-pressed={detailsOpen} onClick={() => setDetailsOpen(!detailsOpen)}><Icon name="panel" size={16}/><span>属性</span></button>
                 <button aria-label={focusMode ? '退出专注' : '专注画布'} title={focusMode ? '退出专注' : '专注画布'} aria-pressed={focusMode} onClick={() => setFocusMode(!focusMode)}><Icon name="expand" size={16}/><span>{focusMode ? '退出专注' : '专注画布'}</span></button>
                 </div></div>
-            <div className={`workspace${detailsOpen ? ' with-details' : ''}`}><Graph plan={saved ? draft : undefined} job={w.job} viewport={w.viewport} onEdit={editNode} onDuplicate={duplicateTask} onViewport={viewport => {
+            <div className="workspace"><Graph plan={saved ? draft : undefined} job={w.job} viewport={w.viewport} onEdit={editNode} onDuplicate={duplicateTask} onUpdateEdge={editDependency}
+                validationNotice={saved && findings.length > 0 ? <button className="canvas-validation" onClick={() => {setTab('coverage'); requestAnimationFrame(() => document.getElementById('plan-validation-results')?.scrollIntoView({block:'start'}))}}><span aria-hidden="true">!</span>{findings.filter(f => f.level === 'error').length} 项结构错误 · {findings.filter(f => f.level === 'coverage').length} 项覆盖遗漏</button> : undefined}
+                onViewport={viewport => {
                 api<Workflow>(`/workflows/${w.id}/layout`, 'PUT', {viewport}).then(onUpdate).catch(e => onError(e.message))
             }} layout={layout} selected={selected} onSelect={setSelected}
                                               onLayout={l => {
@@ -344,13 +375,10 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
                     return
                 }
                 taskChange({...target, dependsOn: [...new Set([...target.dependsOn, c.source])]})
-            }} onDeleteEdge={(from, to) => {
-                const target = draft.pm.tasks.find(t => t.id === to);
-                if (!target || stageOf(from) || stageOf(to)) return;
-                taskChange({...target, dependsOn: target.dependsOn.filter(x => x !== from)})
-            }} onDeleteNode={deleteTask}/>{detailsOpen && <section className="node-details" aria-label="节点属性"><header className="node-details-head"><div><strong>{stageOf(selected) ? '规划阶段' : '编辑节点'}</strong></div><button aria-label="关闭节点属性" onClick={() => setDetailsOpen(false)}><Icon name="close" size={18}/></button></header>{stageOf(selected) ? <PlanningDetails key={stageOf(selected)} w={w} stage={stageOf(selected)!} onUpdate={onUpdate} onError={onError}/> : <Inspector plan={draft} req={req} task={draft.pm.tasks.find(t => t.id === selected)}
-                                                     onChange={taskChange}
-                                                     onDelete={() => deleteTask(selected)}/>}</section>}</div>
+             }} onDeleteEdge={(from, to) => {
+                const error = editDependency({from,to});
+                if (error) onError(error)
+            }} onDeleteNode={deleteTask}/></div>
             <footer className="canvas-status"><span><i/> {draft.pm.tasks.length} 个任务 · {draft.agents.length} 个 Agent</span></footer>
         </section>}
         {tab === 'agents' && <div className="scroll-content">
@@ -375,8 +403,8 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
                 value={a.capabilities.join('\n')}
                 onChange={e => agentChange({...a, capabilities: e.target.value.split('\n').filter(Boolean)})}/></label>
                 <p>负责任务：{draft.pm.tasks.filter(t => t.agentId === a.id).map(t => t.title).join('、') || '未分配任务'}</p>
-                <button className="danger" onClick={() => {
-                    if (confirm('删除该 Agent 会使相关任务未分配，请重新分配后保存。')) change({
+                <button className="danger" onClick={async () => {
+                    if (await ask('删除该 Agent 会使相关任务未分配，请重新分配后保存。', {title: '删除 Agent？', danger: true})) change({
                         ...draft,
                         agents: draft.agents.filter(x => x.id !== a.id),
                         pm: {...draft.pm, tasks: draft.pm.tasks.map(t => t.agentId === a.id ? {...t, agentId: ''} : t)}
@@ -394,7 +422,7 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
             <h3>全部验收条件均为必需项</h3>{draft.pm.criteria.map(c => <div className="coverage-row" key={c.id}>
                 <strong>{c.id} · {c.text}</strong><span>{draft.pm.tasks.filter(t => t.criteria.includes(c.id)).map(t => t.title).join(' / ') || '⚠ 未覆盖'}</span>
             </div>)}
-            <h3>校验结果</h3>{findings.length ? findings.map((f, i) => <button className="finding" key={i}
+            <h3 id="plan-validation-results">校验结果</h3>{findings.length ? findings.map((f, i) => <button className="finding" key={i}
                                                                                onClick={() => {
                                                                                    if (f.path.startsWith('task:')) {
                                                                                        setSelected(f.path.slice(5));
@@ -423,8 +451,10 @@ export default function Editor({w, onUpdate, onError, regenerate}: {
                 <pre>{JSON.stringify(r.plan, null, 2)}</pre>
             </details>)}</div>}
         <div className="scroll-content" hidden={tab !== 'regenerate'}>{regenerate}</div>
-        {saved && findings.length > 0 && <div className="editor-footer">
-            <button onClick={() => setTab('coverage')}>{findings.filter(f => f.level === 'error').length} 项结构错误
-                · {findings.filter(f => f.level === 'coverage').length} 项覆盖遗漏</button></div>}
+        <Presence>{detailsOpen && <Dialog className="node-dialog" title={stageOf(selected) ? (stageOf(selected) === 'pm' ? '需求分析' : 'AI 编排') : '任务详情'}
+            description={stageOf(selected) ? '系统规划阶段 · 问答、结果与配置' : '修改实时保留到方案草稿，正式保存请返回工作台'} onClose={() => setDetailsOpen(false)}
+            footer={!stageOf(selected) ? <><span className="dialog-feedback">{stored === '草稿已保留' ? '已保留到草稿' : stored}</span><button className="primary" onClick={() => setDetailsOpen(false)}>完成</button></> : undefined}>
+            {stageOf(selected) ? <PlanningDetails key={stageOf(selected)} w={w} stage={stageOf(selected)!} onUpdate={onUpdate} onError={onError}/> : <Inspector plan={draft} req={req} task={draft.pm.tasks.find(t => t.id === selected)} onChange={taskChange} onDelete={() => {deleteTask(selected); setDetailsOpen(false)}}/>}
+        </Dialog>}</Presence>
     </div>
 }

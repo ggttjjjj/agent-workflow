@@ -38,6 +38,7 @@ export default function Inspector({
         <h3>任务详情</h3>
         <small>{task.id}</small>
       </div>
+      <section className="task-section task-basics"><h4>基本信息</h4>
       {field("title")}
       {field("goal")}
       <label className="field">
@@ -59,6 +60,7 @@ export default function Inspector({
           ))}
         </select>
       </label>
+      </section><section className="task-section"><h4>输出与完成条件</h4>
       {(["outputs", "done"] as const).map((k) => (
         <label key={k} className="field">
           {k === "outputs" ? "预期输出（每行一项）" : "完成条件（每行一项）"}
@@ -71,8 +73,9 @@ export default function Inspector({
           />
         </label>
       ))}
-      <label className="field">
-        前置依赖
+      </section><section className="task-section"><h4>依赖与输入</h4>
+      <div className="field">
+        <span>前置依赖</span>
         <div className="checks">
           {plan.pm.tasks
             .filter((x) => x.id !== task.id)
@@ -94,9 +97,9 @@ export default function Inspector({
               </label>
             ))}
         </div>
-      </label>
-      <label className="field">
-        输入来源
+      </div>
+      <div className="field">
+        <span>输入来源</span>
         <div className="inputs">
           {task.inputs.map((input, i) => (
             <div key={i}>
@@ -163,7 +166,7 @@ export default function Inspector({
             </div>
           ))}
         </div>
-      </label>
+      </div>
       <button
         className="small"
         onClick={() =>
@@ -175,8 +178,9 @@ export default function Inspector({
       >
         ＋ 添加输入
       </button>
-      <label className="field">
-        关联验收要求
+      </section><section className="task-section"><h4>验收要求</h4>
+      <div className="field">
+        <span>关联验收要求</span>
         <div className="checks">
           {plan.pm.criteria.map((c) => (
             <label key={c.id}>
@@ -196,7 +200,7 @@ export default function Inspector({
             </label>
           ))}
         </div>
-      </label>
+      </div></section>
       <button className="danger" onClick={onDelete}>
         删除任务
       </button>

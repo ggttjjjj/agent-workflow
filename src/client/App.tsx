@@ -2,15 +2,20 @@ import {useEffect, useState} from 'react';
 import {api} from './api';
 import InputPanel from './components/InputPanel';
 import SettingsPanel from './components/SettingsPanel';
+import Presence from './components/Presence';
 import Editor from './components/Editor';
 import PlanPanel from './components/PlanPanel';
 import Regenerate from './components/Regenerate';
 import Icon from './components/Icon';
 import FloatingNotice from './components/FloatingNotice';
+import Dialog, {useConfirm} from './components/Dialog';
 import {current, type Workflow, type Picture, type PlanLists} from '../shared/domain';
 
 export default function App() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const ask = useConfirm();
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {try {return localStorage.getItem('weave-sidebar-collapsed') === 'true'} catch {return false}});
+    useEffect(() => {try {localStorage.setItem('weave-sidebar-collapsed', String(sidebarCollapsed))} catch {/* optional preference */}}, [sidebarCollapsed]);
     const [lists, setLists] = useState<PlanLists>({plans: [], trash: []}), [w, setW] = useState<Workflow>(), [id, setId] = useState(''), [settings, setSettings] = useState(false), [meta, setMeta] = useState({
         configured: false,
         model: 'deepseek-flash'
@@ -96,7 +101,7 @@ export default function App() {
         try {
             draft = localStorage.getItem('weave-draft-' + w.id)
         } catch {/* storage unavailable: nothing to protect */}
-        if (draft && !confirm('本地人工草稿将保留。重生成参考已保存方案；如需纳入修改，请先保存。继续？')) return;
+        if (draft && !await ask('本地人工草稿将保留。重生成参考已保存方案；如需纳入修改，请先保存。继续？', {title: '重新生成方案？'})) return;
         if (generating) return;
         return invoke(() => api<Workflow>(`/workflows/${w.id}/generate`, 'POST', {
             expectedVersion: w.version,
@@ -104,9 +109,9 @@ export default function App() {
         }))
     }
 
-    return <div className={`app${sidebarOpen ? ' sidebar-open' : ''}`}>
-        {sidebarOpen && <button className="sidebar-backdrop" aria-label="关闭导航" onClick={() => setSidebarOpen(false)}/>}
-        <aside className="sidebar" id="app-sidebar" aria-label="方案导航"><a className="brand" href="#" onClick={e => {
+    return <div className={`app${sidebarOpen ? ' sidebar-open' : ''}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
+        <Presence>{sidebarOpen && <button className="sidebar-backdrop" aria-label="关闭导航" onClick={() => setSidebarOpen(false)}/>}</Presence>
+        <aside className="sidebar" id="app-sidebar" aria-label="方案导航"><button className="sidebar-collapse" aria-label="收起侧边栏" onClick={() => {setSidebarCollapsed(true); setSidebarOpen(false)}}><Icon name="panel"/></button><a className="brand" href="#" onClick={e => {
             e.preventDefault();
             setId('')
         }}><b>〃</b><span>织序 <em>weave</em></span></a>
@@ -128,12 +133,16 @@ export default function App() {
         </aside>
         <main>
             <header className="app-topbar">
+                <div className="navigation-capsule" aria-label="快捷导航">
+                    <button aria-label="展开侧边栏" aria-expanded={!sidebarCollapsed} aria-controls="app-sidebar" onClick={() => setSidebarCollapsed(false)}><Icon name="panel"/></button>
+                    <button aria-label="新建方案" onClick={() => {setId(''); setError('')}}><Icon name="plus"/></button>
+                </div>
                 <button className="mobile-menu" aria-label="切换方案导航" aria-expanded={sidebarOpen} aria-controls="app-sidebar" onClick={() => setSidebarOpen(!sidebarOpen)}><Icon name="menu"/></button>
                 <span className="topbar-title">{id ? '方案工作台' : '新建方案'}</span>
                 {id && w && !current(w) && <button className="topbar-plan-action" disabled={busy || generating || !!w.candidate || !meta.configured}
                                                                  onClick={() => void generate()}>开始规划</button>}
             </header>
-            {error && <FloatingNotice tone="error" onClose={() => setError('')}>{error}</FloatingNotice>}
+            <Presence>{error && <FloatingNotice tone="error" onClose={() => setError('')}>{error}</FloatingNotice>}</Presence>
             {!id ? <div className="welcome">
                 <div className="welcome-heading">
                     <h1>嗨，今天想规划些什么？</h1><p>说说你的想法，织序帮你拆解任务、编排角色。</p>
@@ -145,19 +154,13 @@ export default function App() {
                         regenerate={<Regenerate w={w} busy={busy} configured={meta.configured} onGenerate={generate}/>}/>
             </>}
         </main>
-        {settings && <SettingsPanel onClose={() => setSettings(false)}/>}
-        {requirementOpen && w && <div className="modal-back">
-            <section className="modal">
-                <header>
-                    <div><h2>需求与参考资料</h2><p>修改后建立新需求版本，旧方案保留，需明确重生成。</p></div>
-                    <button onClick={() => setRequirementOpen(false)}>×</button>
-                </header>
+        <Presence>{settings && <SettingsPanel onClose={() => setSettings(false)}/>}</Presence>
+        <Presence>{requirementOpen && w && <Dialog title="需求与参考资料" description="修改后建立新需求版本，旧方案保留，需明确重生成。" onClose={() => {if (!busy) setRequirementOpen(false)}}>
                 <InputPanel initial={w.requirement} busy={busy} label="提交需求新修订"
                             onSubmit={async (text, images) => {
                                 const next = await invoke(() => api(`/workflows/${w.id}/requirements`, 'POST', {text, images, expectedVersion: w.version}));
                                 if (next) setRequirementOpen(false)
                             }}/>
-            </section>
-        </div>}
+        </Dialog>}</Presence>
     </div>
 }

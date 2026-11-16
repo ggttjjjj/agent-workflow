@@ -1,5 +1,6 @@
-type IconName = 'menu' | 'plus' | 'arrow' | 'image' | 'settings' | 'sparkles' | 'edit' | 'copy' | 'panel' | 'expand' | 'close' | 'trash';
+type IconName = 'menu' | 'plus' | 'arrow' | 'image' | 'settings' | 'sparkles' | 'edit' | 'copy' | 'panel' | 'expand' | 'close' | 'trash' | 'search';
 const paths: Record<IconName, string> = {
+    search: 'M20 20l-5-5M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0',
     edit: 'm15 5 4 4M4 20l4-1L20 7l-4-4L4 15z',
     copy: 'M9 9h11v11H9zM15 9V4H4v11h5',
     panel: 'M3 4h18v16H3zM15 4v16',

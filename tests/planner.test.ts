@@ -1,60 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { Store } from "../src/server/store.ts";
 import { Engine, checkQuestions } from "../src/server/engine.ts";
 import { readStream } from "../src/server/model.ts";
 import {
   defaults,
   validatePlan,
   current,
-  type Plan,
-  type Workflow,
 } from "../src/shared/domain.ts";
 import { fixture } from "./fixtures.ts";
-
-function setup() {
-  const store = new Store(":memory:");
-  const req = { version: 1, text: "测试需求", images: [] };
-  const w: Workflow = {
-    id: randomUUID(),
-    title: "测试",
-    version: 1,
-    requirement: req,
-    requirements: [req],
-    revisions: [],
-    layout: {},
-    createdAt: "2026-11-16",
-    updatedAt: "2026-11-16",
-  };
-  store.put(w);
-  return { store, w };
-}
-
-const response = (stage: string) => ({
-  result:
-    stage === "pm"
-      ? { kind: "ready", pm: fixture.pm }
-      : {
-          kind: "ready",
-          agents: fixture.agents,
-          assignments: fixture.pm.tasks.map((t) => ({
-            taskId: t.id,
-            agentId: t.agentId,
-          })),
-          rationale: fixture.rationale,
-        },
-  usage: { total_tokens: 10 },
-});
-
-async function settle(store: Store, id: string) {
-  for (let n = 0; n < 100; n++) {
-    const w = store.get(id);
-    if (!["analyzing", "orchestrating"].includes(w.job?.status || "")) return w;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error("timeout");
-}
+import { setup, response, settle } from "./engine-helpers.ts";
 
 process.env.DEEPSEEK_API_KEY = "test-placeholder-never-network";
 test("valid structure, cycle, dangling assignment and coverage are distinguished", () => {
@@ -273,17 +227,6 @@ test("cancel rejects late result without invoking downstream stage", async () =>
   assert.equal(store.get(w.id).job?.status, "cancelled");
   assert.equal(count, 1);
   assert.equal(store.get(w.id).revisions.length, 0);
-});
-test("regeneration is candidate, never overwrites saved plan", async () => {
-  const { store, w } = setup();
-  const engine = new Engine(store, async (_j, s) => response(s));
-  engine.start(w.id, 1, "");
-  let done = await settle(store, w.id);
-  const original = done.currentId;
-  engine.start(w.id, done.version, "replan");
-  done = await settle(store, w.id);
-  assert.equal(done.currentId, original);
-  assert.ok(done.candidate);
 });
 test("new requirement makes old retry invalid", async () => {
   const { store, w } = setup();

@@ -1,34 +1,14 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
 import {mkdtempSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {Store} from '../src/server/store.ts';
 import {Engine} from '../src/server/engine.ts';
 import {callModel} from '../src/server/model.ts';
-import {current, defaults, requirementAnalysis, requirementBaseline, validatePlan, type Job, type Workflow} from '../src/shared/domain.ts';
+import {current, defaults, requirementAnalysis, requirementBaseline, validatePlan, type Job} from '../src/shared/domain.ts';
 import {fixture} from './fixtures.ts';
-
-function setup(path = ':memory:') {
-    const store = new Store(path);
-    const req = {version: 1, text: '测试需求', images: []};
-    const w: Workflow = {id: randomUUID(), title: '测试', version: 1, requirement: req, requirements: [req], revisions: [], layout: {}, createdAt: '2026-11-16', updatedAt: '2026-11-16'};
-    store.put(w);
-    return {store, w}
-}
-const response = (stage: string, pm = fixture.pm) => ({
-    result: stage === 'pm' ? {kind: 'ready', pm} : {kind: 'ready', agents: fixture.agents, assignments: pm.tasks.map(t => ({taskId: t.id, agentId: t.agentId})), rationale: fixture.rationale},
-    usage: {total_tokens: 10}
-});
-async function settle(store: Store, id: string) {
-    for (let n = 0; n < 200; n++) {
-        const w = store.get(id);
-        if (!['analyzing', 'orchestrating'].includes(w.job?.status || '')) return w;
-        await new Promise(r => setTimeout(r, 10))
-    }
-    throw new Error('timeout')
-}
+import {setup, response, settle} from './engine-helpers.ts';
 process.env.DEEPSEEK_API_KEY = 'test-placeholder-never-network';
 process.env.MODEL_MAX_ATTEMPTS = '1';
 
@@ -127,6 +107,7 @@ test('Q&A survives regeneration, candidate discard, restart and is snapshotted p
     engine.retry(w.id, done.version, '部署在本地');
     done = await settle(store, w.id);
     const original = structuredClone(current(done));
+    assert.ok(original);
     assert.equal(done.answers?.[0].answer, '部署在本地');
     assert.equal(original?.plan.answers?.[0].questions[0].text, '部署在哪里？');
     store.db.close();
@@ -136,6 +117,9 @@ test('Q&A survives regeneration, candidate discard, restart and is snapshotted p
     engine.start(w.id, done.version, '重新分工');
     done = await settle(store, w.id);
     assert.equal(done.job?.status, 'complete');
+    assert.equal(done.currentId, original.id);
+    assert.deepEqual(current(done), original);
+    assert.ok(done.candidate);
     for (const j of snapshots.slice(-2)) assert.equal(j.answers[0].answer, '部署在本地');
     assert.equal(done.job?.answers[0].requirementVersion, 1);
     assert.equal(done.candidate?.answers?.[0].stage, 'pm');
@@ -227,6 +211,91 @@ test('real request serialization includes persisted answers and protection basel
     };
     for (const stage of ['pm', 'orchestrator'] as const) await callModel(job, stage, new AbortController().signal, () => {});
     assert.equal(requests, 2)
+});
+
+test('model requests use the model output maximum unless explicitly overridden', async t => {
+    const {store, w} = setup();
+    t.after(() => store.db.close());
+    const engine = new Engine(store, async (_j, s) => response(s));
+    engine.start(w.id, 1, '');
+    const job = (await settle(store, w.id)).job!;
+    const originalLimit = process.env.MODEL_MAX_TOKENS;
+    t.after(() => {
+        if (originalLimit === undefined) delete process.env.MODEL_MAX_TOKENS;
+        else process.env.MODEL_MAX_TOKENS = originalLimit
+    });
+    let requests = 0, expected = 393216;
+    t.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+        requests++;
+        assert.equal(JSON.parse(String(init?.body)).max_tokens, expected);
+        return new Response('data: {"choices":[{"delta":{"content":"{}"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n')
+    });
+    for (const configured of [undefined, '', '   ', '1', '12000', ' 24000 ', '393216']) {
+        if (configured === undefined) delete process.env.MODEL_MAX_TOKENS;
+        else process.env.MODEL_MAX_TOKENS = configured;
+        expected = configured?.trim() ? Number(configured) : 393216;
+        for (const stage of ['pm', 'orchestrator'] as const) {
+            await callModel(job, stage, new AbortController().signal, () => {})
+        }
+    }
+    assert.equal(requests, 14);
+    for (const configured of ['0', '-1', '1.5', 'NaN', 'Infinity', 'invalid', '393217']) {
+        process.env.MODEL_MAX_TOKENS = configured;
+        await assert.rejects(callModel(job, 'pm', new AbortController().signal, () => {}), /MODEL_MAX_TOKENS.*整数/)
+    }
+    assert.equal(requests, 14, 'invalid overrides must fail before contacting the provider')
+});
+
+test('repeated regeneration retains the full output budget and saves large streamed JSON', async t => {
+    const {acceptCandidate} = await import('../src/server/revisions.ts');
+    const {store, w} = setup();
+    t.after(() => store.db.close());
+    const originalLimit = process.env.MODEL_MAX_TOKENS;
+    delete process.env.MODEL_MAX_TOKENS;
+    t.after(() => {
+        if (originalLimit === undefined) delete process.env.MODEL_MAX_TOKENS;
+        else process.env.MODEL_MAX_TOKENS = originalLimit
+    });
+    const longPrompt = '保持任务职责、验收条件和交接约束。'.repeat(6000);
+    let requests = 0;
+    t.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+        requests++;
+        const payload = JSON.parse(String(init?.body));
+        assert.equal(payload.max_tokens, 393216);
+        const context = JSON.parse(payload.messages[1].content[0].text);
+        if (requests > 2) assert.equal(context.previousPlan.agents[0].prompt, longPrompt);
+        const stage = context.pm ? 'orchestrator' : 'pm';
+        const result = structuredClone(response(stage).result);
+        if ('agents' in result && result.agents) result.agents[0].prompt = longPrompt;
+        const json = JSON.stringify(result);
+        const events: string[] = [];
+        for (let i = 0; i < json.length; i += 8192) {
+            events.push('data: ' + JSON.stringify({choices: [{delta: {content: json.slice(i, i + 8192)}}]}) + '\n\n')
+        }
+        events.push('data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n');
+        const encoder = new TextEncoder();
+        return new Response(new ReadableStream({
+            start(controller) {
+                for (const event of events) controller.enqueue(encoder.encode(event));
+                controller.close()
+            }
+        }))
+    });
+    const engine = new Engine(store);
+    let done = w;
+    for (let round = 0; round < 3; round++) {
+        engine.start(w.id, done.version, round ? '保留需求并优化分工' : '');
+        done = await settle(store, w.id);
+        assert.equal(done.job?.status, 'complete', done.job?.error);
+        if (round) {
+            assert.equal(done.candidate?.agents[0].prompt, longPrompt);
+            done = store.mutate(w.id, acceptCandidate)
+        }
+        assert.equal(current(done)?.plan.agents[0].prompt, longPrompt);
+        assert.deepEqual(validatePlan(current(done)!.plan, done.requirement), [])
+    }
+    assert.equal(requests, 6);
+    assert.equal(done.revisions.length, 3)
 });
 
 test('candidate adoption and confirmation share the immutable guard, including legacy documents', async () => {

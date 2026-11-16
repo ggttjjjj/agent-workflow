@@ -10,6 +10,19 @@ export class ModelError extends Error {
     }
 }
 
+// deepseek-flash supports up to 384K output tokens (including thinking tokens).
+// https://api-docs.deepseek.com/api/create-chat-completion
+const MODEL_MAX_OUTPUT_TOKENS = 393216;
+
+function outputTokenLimit() {
+    const configured = process.env.MODEL_MAX_TOKENS?.trim();
+    const limit = configured ? Number(configured) : MODEL_MAX_OUTPUT_TOKENS;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > MODEL_MAX_OUTPUT_TOKENS) {
+        throw new ModelError(`MODEL_MAX_TOKENS 必须为 1–${MODEL_MAX_OUTPUT_TOKENS} 的整数；留空则使用模型最大输出上限`);
+    }
+    return limit;
+}
+
 export async function readStream(response: Response, onText: (s: string) => void) {
     if (!response.body) throw new ModelError('模型没有返回响应流', true);
     let buffer = '', content = '', finish: string | undefined, done = false, usage: unknown = null;
@@ -99,7 +112,7 @@ export async function callModel(job: Job, stage: 'pm' | 'orchestrator', signal: 
         reasoning_effort: stage === 'pm' ? job.settings.pmEffort : job.settings.orchestratorEffort,
         response_format: {type: 'json_object'},
         stream: true,
-        max_tokens: Number(process.env.MODEL_MAX_TOKENS || 12000),
+        max_tokens: outputTokenLimit(),
         messages: [{role: 'system', content: prompt + '\n\n宿主输出契约（必须遵守）：\n' + contract}, {
             role: 'user',
             content: [{

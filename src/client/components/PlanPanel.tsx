@@ -1,6 +1,8 @@
 import {useEffect, useRef, useState, type MouseEvent} from 'react';
 import {api} from '../api';
 import FloatingNotice from './FloatingNotice';
+import Presence from './Presence';
+import {ModalLayer, dialogIsOpen} from './Dialog';
 import {cleanTitle, MAX_PLAN_TITLE, TRASH_CONFIRM, type PlanLists, type PlanSummary} from '../../shared/domain';
 
 type Dialog = {kind: 'trash' | 'purge' | 'rename'; id: string} | {kind: 'empty'};
@@ -80,7 +82,7 @@ export default function PlanPanel({lists, currentId, onSelect, onCreate, onLists
 
     useEffect(() => {
         const key = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && !busy.current) setDialog(undefined)
+            if (e.key === 'Escape' && !busy.current && !dialogIsOpen()) setDialog(undefined)
         };
         document.addEventListener('keydown', key);
         return () => document.removeEventListener('keydown', key)
@@ -218,10 +220,6 @@ export default function PlanPanel({lists, currentId, onSelect, onCreate, onLists
         }, true)
     }
 
-    const backdrop = (e: MouseEvent<HTMLDivElement>) => {
-        if (e.target === e.currentTarget) closeDialog()
-    };
-
     return <div className="plan-panel">
         <div className="section-title"><h3>我的方案</h3>
             <button className="small" onClick={() => {
@@ -277,12 +275,12 @@ export default function PlanPanel({lists, currentId, onSelect, onCreate, onLists
             setConfirm('');
             setDialog({kind: 'empty'})
         }}>清空回收站（{lists.trash.length}）</button>}
-        {menuPlan && menu && <div className="plan-menu" role="menu" style={{top: menu.top, left: menu.left}}>
+        <Presence>{menuPlan && menu && <div className="plan-menu" role="menu" style={{top: menu.top, left: menu.left}}>
             <button role="menuitem" onClick={() => openRename(menuPlan)}>重命名</button>
             <button role="menuitem" onClick={() => duplicatePlan(menuPlan)}>创建副本</button>
             <button role="menuitem" className="danger" onClick={() => openTrash(menuPlan)}>移入回收站…</button>
-        </div>}
-        {dialog?.kind === 'rename' && target && <div className="modal-back" onMouseDown={backdrop}>
+        </div>}</Presence>
+        <Presence>{dialog?.kind === 'rename' && target && <ModalLayer onClose={closeDialog}>
             <section className="modal plan-modal" role="dialog" aria-modal="true" aria-label="重命名方案">
                 <header>
                     <div><h2>重命名方案</h2><p>只修改名称，不影响需求、方案内容与确认记录。</p></div>
@@ -301,8 +299,8 @@ export default function PlanPanel({lists, currentId, onSelect, onCreate, onLists
                             onClick={() => renamePlan(target)}>{working ? '保存中…' : '保存名称'}</button>
                 </footer>
             </section>
-        </div>}
-        {dialog?.kind === 'trash' && target && <div className="modal-back" onMouseDown={backdrop}>
+        </ModalLayer>}</Presence>
+        <Presence>{dialog?.kind === 'trash' && target && <ModalLayer onClose={closeDialog}>
             <section className="modal plan-modal" role="dialog" aria-modal="true" aria-label="删除方案">
                 <header>
                     <div><h2>删除方案</h2><p>「{target.title}」将被移入回收站，可撤销或稍后恢复。</p></div>
@@ -322,8 +320,8 @@ export default function PlanPanel({lists, currentId, onSelect, onCreate, onLists
                             onClick={() => trashPlan(target)}>{working ? '处理中…' : '移入回收站'}</button>
                 </footer>
             </section>
-        </div>}
-        {dialog?.kind === 'purge' && target && <div className="modal-back" onMouseDown={backdrop}>
+        </ModalLayer>}</Presence>
+        <Presence>{dialog?.kind === 'purge' && target && <ModalLayer onClose={closeDialog}>
             <section className="modal plan-modal" role="dialog" aria-modal="true" aria-label="彻底删除方案">
                 <header>
                     <div><h2>彻底删除方案</h2><p>此操作不可撤销：方案、全部修订、确认记录、需求图片与画布布局将从本地数据库移除。</p></div>
@@ -343,8 +341,8 @@ export default function PlanPanel({lists, currentId, onSelect, onCreate, onLists
                             onClick={() => purgePlan(target)}>{working ? '删除中…' : '彻底删除'}</button>
                 </footer>
             </section>
-        </div>}
-        {dialog?.kind === 'empty' && lists.trash.length > 0 && <div className="modal-back" onMouseDown={backdrop}>
+        </ModalLayer>}</Presence>
+        <Presence>{dialog?.kind === 'empty' && lists.trash.length > 0 && <ModalLayer onClose={closeDialog}>
             <section className="modal plan-modal" role="dialog" aria-modal="true" aria-label="清空回收站">
                 <header>
                     <div><h2>清空回收站</h2><p>回收站中的 {lists.trash.length} 个方案及其修订、确认记录和图片将被永久删除，无法恢复。</p></div>
@@ -363,10 +361,10 @@ export default function PlanPanel({lists, currentId, onSelect, onCreate, onLists
                             onClick={emptyTrash}>{working ? '清空中…' : `清空 ${lists.trash.length} 个方案`}</button>
                 </footer>
             </section>
-        </div>}
-        {toast && <FloatingNotice onClose={() => setToast(undefined)}>
+        </ModalLayer>}</Presence>
+        <Presence>{toast && <FloatingNotice onClose={() => setToast(undefined)}>
             <span>{toast.message}</span>
             {toast.label && <button onClick={() => toast.run?.()}>{toast.label}</button>}
-        </FloatingNotice>}
+        </FloatingNotice>}</Presence>
     </div>
 }
