@@ -25,6 +25,13 @@ npm start
 
 数据存储于 `data/weave.sqlite`（SQLite WAL）。浏览器编辑草稿保存在浏览器的 localStorage。
 
+## 方案管理
+
+左侧「我的方案」保存全部历史方案，支持按名称与需求摘要搜索、重命名、创建副本和删除；「回收站」集中管理已删除方案。删除分两步，避免误删：
+
+1. **移入回收站**：可撤销，也可稍后恢复。生成中的方案会先取消本次生成，迟到的模型结果不会再写入；该方案未保存的浏览器编辑草稿同时清除。
+2. **彻底删除**：仅在回收站中提供，需要输入完整方案标题确认；确认后方案、全部修订、确认记录、需求图片和画布布局从 `data/weave.sqlite` 移除，无法恢复。「清空回收站」还需输入确认口令，并校验确认时看到的方案数量。
+
 ## 运行测试
 
 ```sh
@@ -37,12 +44,12 @@ npm test
 src/client/           前端（React）
   ├─ main.tsx         浏览器入口
   ├─ App.tsx / api.ts / style.css
-  └─ components/      InputPanel、Editor、Graph、Inspector、SettingsPanel
+  └─ components/      PlanPanel、InputPanel、Editor、Graph、Inspector、SettingsPanel
 src/server/           后端（Node/Express）
   ├─ index.ts         API、SSE、图片校验、页面服务
-  ├─ engine.ts        两阶段规划、取消、重试、候选保护
+  ├─ engine.ts        两阶段规划、取消、重试、候选保护、删除时的生成取消
   ├─ model.ts         DeepSeek 请求与流解析
-  ├─ store.ts         SQLite 持久化
+  ├─ store.ts         SQLite 持久化、回收站与方案管理
   └─ config.ts        环境变量与项目根解析
 src/shared/domain.ts  前后端共用模型
 tests/                测试
@@ -53,3 +60,5 @@ tests/                测试
 - [Workflow 规划阶段节点实施说明](docs/implemented/workflow-planning-stage-nodes.md)（已实施；真实浏览器及 API 验收待执行）
 
 规划结果保存失败时，已校验结果会保留在 SQLite 路径旁的 `.recovery/` 目录，重试不重复调用模型；备份应用数据时请同时保留该目录。
+
+方案管理的交互与删除规则见 [docs/implemented/plan-management.md](docs/implemented/plan-management.md)。

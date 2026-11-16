@@ -2,8 +2,11 @@ import type {Job} from '../shared/domain.ts';
 import {MIN_QUESTION_OPTIONS, MAX_QUESTION_OPTIONS} from '../shared/domain.ts';
 
 export class ModelError extends Error {
-    constructor(message: string, public retryable = false) {
-        super(message)
+    retryable: boolean;
+
+    constructor(message: string, retryable = false) {
+        super(message);
+        this.retryable = retryable
     }
 }
 

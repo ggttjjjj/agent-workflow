@@ -149,7 +149,36 @@ export interface Workflow {
     viewport?: {x: number; y: number; zoom: number};
     layout: Record<string, { x: number; y: number }>;
     createdAt: string;
-    updatedAt: string
+    updatedAt: string;
+    trashedAt?: string
+}
+
+export const MAX_PLAN_TITLE = 60;
+export const TRASH_CONFIRM = '清空回收站';
+
+/** Everything the sidebar needs to list and manage a saved plan. */
+export interface PlanSummary {
+    id: string;
+    title: string;
+    version: number;
+    confirmed: boolean;
+    generating: boolean;
+    candidate: boolean;
+    revisions: number;
+    requirements: number;
+    requirementVersion: number;
+    tasks: number;
+    agents: number;
+    images: number;
+    summary: string;
+    createdAt: string;
+    updatedAt: string;
+    trashedAt?: string
+}
+
+export interface PlanLists {
+    plans: PlanSummary[];
+    trash: PlanSummary[]
 }
 
 export interface Finding {
@@ -159,6 +188,40 @@ export interface Finding {
 }
 
 export const current = (w: Workflow) => w.revisions.find(r => r.id === w.currentId);
+
+export function planSummary(w: Workflow): PlanSummary {
+    const rev = current(w), plan = rev?.plan || w.candidate;
+    return {
+        id: w.id,
+        title: w.title,
+        version: w.version,
+        confirmed: !!rev?.confirmedAt && rev.plan.requirementVersion === w.requirement.version,
+        generating: !!w.job && ['analyzing', 'orchestrating'].includes(w.job.status),
+        candidate: !!w.candidate,
+        revisions: w.revisions.length,
+        requirements: w.requirements.length,
+        requirementVersion: w.requirement.version,
+        tasks: plan?.pm.tasks.length || 0,
+        agents: plan?.agents.length || 0,
+        images: w.requirement.images.length,
+        summary: w.requirement.text.replace(/\s+/g, ' ').trim().slice(0, 80),
+        createdAt: w.createdAt,
+        updatedAt: w.updatedAt,
+        trashedAt: w.trashedAt
+    }
+}
+
+/** Trim and collapse whitespace; empty or overlong titles are rejected. */
+export function cleanTitle(value: unknown): string {
+    if (typeof value !== 'string') return '';
+    const title = value.replace(/\s+/g, ' ').trim();
+    return title && [...title].length <= MAX_PLAN_TITLE ? title : ''
+}
+
+export function copyTitle(title: string): string {
+    const suffix = '（副本）';
+    return [...title].slice(0, MAX_PLAN_TITLE - [...suffix].length).join('') + suffix
+}
 const list = (x: unknown): x is string[] => Array.isArray(x) && x.every(v => typeof v === 'string' && v.trim().length > 0);
 const nonempty = (x: unknown) => typeof x === 'string' && x.trim().length > 0;
 

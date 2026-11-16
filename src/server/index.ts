@@ -7,7 +7,7 @@ import sharp from 'sharp';
 import {Store} from './store.ts';
 import {Engine, active} from './engine.ts';
 import {acceptCandidate, confirmRevision} from './revisions.ts';
-import {defaults, current, requirementBaseline, validatePlan, validateSettings, type Picture, type Workflow} from '../shared/domain.ts';
+import {defaults, current, requirementBaseline, planSummary, cleanTitle, validatePlan, validateSettings, MAX_PLAN_TITLE, TRASH_CONFIRM, type Picture, type Workflow} from '../shared/domain.ts';
 
 const {port, dataPath} = loadConfig();
 const app = express(), store = new Store(dataPath),
@@ -23,6 +23,8 @@ app.use(express.json({limit: '40mb'}));
 function bad(m: string, status = 400): never {
     throw Object.assign(new Error(m), {status})
 }
+
+const lists = () => ({plans: store.all().map(planSummary), trash: store.all(true).map(planSummary)});
 
 async function requirement(body: any, version: number) {
     const text = typeof body.text === 'string' ? body.text.trim() : '';
@@ -53,7 +55,7 @@ async function requirement(body: any, version: number) {
 }
 
 app.use('/api/workflows/:id', (q, _r, next) => {
-    if (q.method === 'POST' && !q.path.endsWith('/cancel') && (!Number.isInteger(q.body?.expectedVersion) || q.body.expectedVersion < 1)) return next(Object.assign(new Error('缺少有效版本号'), {status: 400}));
+    if (q.method === 'POST' && !q.path.endsWith('/cancel') && !q.path.endsWith('/trash') && (!Number.isInteger(q.body?.expectedVersion) || q.body.expectedVersion < 1)) return next(Object.assign(new Error('缺少有效版本号'), {status: 400}));
     next()
 });
 app.get('/api/meta', (_q, r) => r.json({configured: !!process.env.DEEPSEEK_API_KEY, model: 'deepseek-flash'}));
@@ -62,17 +64,12 @@ app.put('/api/settings', (q, r) => {
     if (!validateSettings(q.body)) bad('提示词或思考强度无效');
     r.json(store.saveSettings(q.body))
 });
-app.get('/api/workflows', (_q, r) => r.json(store.all().map(w => ({
-    id: w.id,
-    title: w.title,
-    updatedAt: w.updatedAt,
-    confirmed: !!current(w)?.confirmedAt && current(w)?.plan.requirementVersion === w.requirement.version
-}))));
+app.get('/api/workflows', (_q, r) => r.json(lists()));
 app.post('/api/workflows', async (q, r) => {
     const req = await requirement(q.body, 1);
     const w: Workflow = {
         id: randomUUID(),
-        title: (req.text || req.images[0].name).slice(0, 32),
+        title: cleanTitle([...(req.text || req.images[0].name)].slice(0, 32).join('')) || '未命名方案',
         version: 1,
         requirement: req,
         requirements: [req],
@@ -84,6 +81,37 @@ app.post('/api/workflows', async (q, r) => {
     };
     store.put(w);
     r.json(w)
+});
+app.patch('/api/workflows/:id', (q, r) => {
+    const title = cleanTitle(q.body?.title);
+    if (!title) bad(`方案标题需为 1–${MAX_PLAN_TITLE} 个字符`);
+    store.rename(String(q.params.id), title, Number.isInteger(q.body?.expectedVersion) ? q.body.expectedVersion : undefined);
+    r.json(lists())
+});
+app.post('/api/workflows/:id/duplicate', (q, r) => {
+    const copy = store.duplicate(String(q.params.id));
+    r.json({...lists(), id: copy.id})
+});
+app.post('/api/workflows/:id/trash', (q, r) => {
+    engine.trash(String(q.params.id));
+    r.json(lists())
+});
+app.post('/api/workflows/:id/restore', (q, r) => {
+    store.restore(String(q.params.id), q.body.expectedVersion);
+    r.json(lists())
+});
+// Static route precedes :id so DELETE /api/workflows/trash never resolves as a plan id.
+app.delete('/api/workflows/trash', (q, r) => {
+    if (q.body?.confirm !== TRASH_CONFIRM) bad(`请输入「${TRASH_CONFIRM}」以确认清空`);
+    store.emptyTrash(q.body?.expectedCount);
+    r.json(lists())
+});
+app.delete('/api/workflows/:id', (q, r) => {
+    const id = String(q.params.id), w = store.get(id, true);
+    if (!w.trashedAt) bad('请先将方案移入回收站', 409);
+    if (typeof q.body?.title !== 'string' || q.body.title.trim() !== w.title.trim()) bad('标题不一致，未执行彻底删除');
+    store.purge(id);
+    r.json(lists())
 });
 app.get('/api/workflows/:id', (q, r) => r.json(store.get(String(q.params.id))));
 app.post('/api/workflows/:id/requirements', async (q, r) => {
