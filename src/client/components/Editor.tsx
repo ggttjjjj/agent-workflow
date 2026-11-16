@@ -1,13 +1,17 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useState, type ReactNode} from 'react';
 import {current, validatePlan, type Workflow, type Plan, type Agent} from '../../shared/domain';
 import Graph, {positions} from './Graph';
 import Inspector from './Inspector';
 import {api} from '../api';
+import {confirmState, saveState} from '../editorState';
 
-export default function Editor({w, onUpdate, onError}: {
+type Notice = {text: string; tone: 'saved' | 'confirmed'; requirementVersion: number};
+
+export default function Editor({w, onUpdate, onError, regenerate}: {
     w: Workflow;
     onUpdate: (w: Workflow) => void;
-    onError: (e: string) => void
+    onError: (e: string) => void;
+    regenerate: ReactNode
 }) {
     const revision = current(w)!;
     const key = 'weave-draft-' + w.id;
@@ -26,11 +30,26 @@ export default function Editor({w, onUpdate, onError}: {
             return revision.id
         }
     });
-    const [past, setPast] = useState<Plan[]>([]), [future, setFuture] = useState<Plan[]>([]), [tab, setTab] = useState('graph'), [selected, setSelected] = useState(draft.pm.tasks[0]?.id || ''), [stored, setStored] = useState(''), [layout, setLayout] = useState(w.layout), [busy, setBusy] = useState(false);
+    const [past, setPast] = useState<Plan[]>([]), [future, setFuture] = useState<Plan[]>([]), [tab, setTab] = useState('graph'), [selected, setSelected] = useState(draft.pm.tasks[0]?.id || ''), [stored, setStored] = useState(''), [layout, setLayout] = useState(w.layout), [busy, setBusy] = useState(false), [notice, setNotice] = useState<Notice>(), [confirming, setConfirming] = useState(false), [saving, setSaving] = useState(false);
     const dirty = JSON.stringify(draft) !== JSON.stringify(revision.plan), conflict = base !== revision.id;
     const req = w.requirements.find(x => x.version === draft.requirementVersion) || w.requirement,
         findings = validatePlan(draft, req);
     const active = ['analyzing', 'orchestrating'].includes(w.job?.status || '');
+    const confirmed = !!revision.confirmedAt && revision.plan.requirementVersion === w.requirement.version;
+    const confirmUi = confirmState({
+        confirmed,
+        confirming,
+        busy,
+        active,
+        dirty,
+        conflict,
+        candidate: !!w.candidate,
+        findings,
+        requirementVersion: w.requirement.version,
+        revisionRequirementVersion: revision.plan.requirementVersion,
+        jobStatus: w.job?.status
+    });
+    const saveUi = saveState({saving, busy, active, conflict, dirty, findings});
     useEffect(() => {
         try {
             if (dirty || conflict) {
@@ -58,7 +77,8 @@ export default function Editor({w, onUpdate, onError}: {
     function change(p: Plan) {
         setPast(v => [...v.slice(-49), draft]);
         setFuture([]);
-        setDraft(p)
+        setDraft(p);
+        setNotice(undefined)
     }
 
     function taskChange(t: Plan['pm']['tasks'][number]) {
@@ -85,6 +105,7 @@ export default function Editor({w, onUpdate, onError}: {
         setBase(id);
         setPast([]);
         setFuture([]);
+        setNotice(undefined);
         localStorage.removeItem(key)
     }
 
@@ -96,11 +117,54 @@ export default function Editor({w, onUpdate, onError}: {
                 const r = current(next)!;
                 reset(r.plan, r.id)
             }
-            onUpdate(next)
+            onUpdate(next);
+            return true
         } catch (e) {
-            onError((e as Error).message)
+            onError((e as Error).message);
+            return false
         } finally {
             setBusy(false)
+        }
+    }
+
+    async function confirmPlan() {
+        if (confirmUi.disabled) return;
+        if (!confirm('我已审查当前已保存方案。')) return;
+        setConfirming(true);
+        try {
+            const ok = await action('confirm', {
+                expectedVersion: w.version,
+                revisionId: revision.id,
+                requirementVersion: w.requirement.version
+            });
+            if (ok) setNotice({
+                text: '编排方案已确认；下游 Agent 尚未执行。',
+                tone: 'confirmed',
+                requirementVersion: w.requirement.version
+            })
+        } finally {
+            setConfirming(false)
+        }
+    }
+
+    async function savePlan() {
+        if (saveUi.disabled) return;
+        setSaving(true);
+        try {
+            const ok = await action('save', {
+                expectedVersion: w.version,
+                baseId: base,
+                plan: draft
+            }, true);
+            if (ok && draft.requirementVersion === w.requirement.version) setNotice({
+                text: findings.some(f => f.level === 'coverage')
+                    ? '方案已保存为新修订；仍有验收条件未覆盖，补齐后才能确认。'
+                    : '方案已保存为新修订；确认后才会标记为已确认。',
+                tone: 'saved',
+                requirementVersion: w.requirement.version
+            })
+        } finally {
+            setSaving(false)
         }
     }
 
@@ -112,30 +176,24 @@ export default function Editor({w, onUpdate, onError}: {
     const agentChange = (a: Agent) => change({...draft, agents: draft.agents.map(x => x.id === a.id ? a : x)});
     return <div className="editor">
         <div className="editor-head">
-            <div><h1>{w.title}</h1><span
-                className="tag">{revision.confirmedAt && !dirty ? '已确认' : '未确认'} · r{revision.number}</span><small
+            <div><h1>{w.title}</h1><span className="tag"
+                title={revision.confirmedAt ? `确认于 ${new Date(revision.confirmedAt).toLocaleString()}` : undefined}>{confirmed && !dirty ? '已确认' : '未确认'} · r{revision.number}</span><small
                 className={stored.includes('失败') ? 'error' : ''}>{stored}</small>
             </div>
             <div className="actions">
-                <button disabled={busy || active || conflict || !dirty || findings.some(f => f.level === 'error')}
-                        onClick={() => action('save', {
-                            expectedVersion: w.version,
-                            baseId: base,
-                            plan: draft
-                        }, true)}>保存方案
-                </button>
-                <button className="primary"
-                        disabled={busy || active || dirty || conflict || !!w.candidate || !!findings.length || draft.requirementVersion !== w.requirement.version || ['waiting', 'issues'].includes(w.job?.status || '')}
-                        onClick={() => {
-                            if (confirm('我已审查当前已保存方案。')) void action('confirm', {
-                                expectedVersion: w.version,
-                                revisionId: revision.id,
-                                requirementVersion: w.requirement.version
-                            })
-                        }}>确认方案
-                </button>
+                <button className={dirty && !active && !conflict && !findings.some(f => f.level === 'error') ? 'primary' : ''}
+                        disabled={saveUi.disabled} title={saveUi.reason || '保存当前编辑为新修订'}
+                        onClick={() => void savePlan()}>{saveUi.label}</button>
+                <button className={confirmUi.disabled && !confirming ? '' : 'primary'} disabled={confirmUi.disabled}
+                        title={confirmUi.reason || '确认当前已保存且校验通过的方案'}
+                        onClick={() => void confirmPlan()}>{confirmUi.label}</button>
             </div>
         </div>
+        {notice && notice.requirementVersion === w.requirement.version &&
+        <div className={'editor-notice ' + notice.tone} role="status">
+            <span>{notice.text}</span>
+            <button onClick={() => setNotice(undefined)} aria-label="关闭提示">×</button>
+        </div>}
         {conflict && <div className="warning">草稿基础版本与当前方案冲突，双方内容均保留。
             <button onClick={() => {
                 if (confirm('丢弃本地草稿并加载当前已保存方案？')) reset()
@@ -168,7 +226,7 @@ export default function Editor({w, onUpdate, onError}: {
             </button>
         </section>}
         <nav
-            className="tabs">{[['graph', '编排画布'], ['agents', 'Agent 定义'], ['coverage', '需求覆盖'], ['compare', '版本与候选']].map(([id, name]) =>
+            className="tabs">{[['graph', '编排画布'], ['agents', 'Agent 定义'], ['coverage', '需求覆盖'], ['compare', '版本与候选'], ['regenerate', '重新生成']].map(([id, name]) =>
             <button key={id} className={tab === id ? 'active' : ''}
                     onClick={() => setTab(id)}>{name}{id === 'coverage' && findings.length > 0 ? ' · ' + findings.length : ''}</button>)}</nav>
         {tab === 'graph' && <>
@@ -309,6 +367,7 @@ export default function Editor({w, onUpdate, onError}: {
                     v{r.plan.requirementVersion} · {new Date(r.createdAt).toLocaleString()} {r.confirmedAt ? '· 已确认' : ''}</summary>
                 <pre>{JSON.stringify(r.plan, null, 2)}</pre>
             </details>)}</div>}
+        <div className="scroll-content" hidden={tab !== 'regenerate'}>{regenerate}</div>
         {findings.length > 0 && <div className="editor-footer">
             <button onClick={() => setTab('coverage')}>{findings.filter(f => f.level === 'error').length} 项结构错误
                 · {findings.filter(f => f.level === 'coverage').length} 项覆盖遗漏</button></div>}

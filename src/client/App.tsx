@@ -4,8 +4,10 @@ import InputPanel from './components/InputPanel';
 import SettingsPanel from './components/SettingsPanel';
 import Questions from './components/Questions';
 import Editor from './components/Editor';
+import PlanPanel from './components/PlanPanel';
+import Regenerate from './components/Regenerate';
 import {formatUsage} from './usage';
-import {current, type Workflow, type Picture} from '../shared/domain';
+import {current, type Workflow, type Picture, type PlanLists} from '../shared/domain';
 
 const states: Record<string, string> = {
     analyzing: 'PM 正在分析与拆解',
@@ -19,16 +21,11 @@ const states: Record<string, string> = {
     save_failed: '结果保存失败'
 };
 export default function App() {
-    const [list, setList] = useState<{
-        id: string;
-        title: string;
-        confirmed: boolean;
-        updatedAt: string
-    }[]>([]), [w, setW] = useState<Workflow>(), [id, setId] = useState(''), [settings, setSettings] = useState(false), [meta, setMeta] = useState({
+    const [lists, setLists] = useState<PlanLists>({plans: [], trash: []}), [w, setW] = useState<Workflow>(), [id, setId] = useState(''), [settings, setSettings] = useState(false), [meta, setMeta] = useState({
         configured: false,
         model: 'deepseek-flash'
-    }), [error, setError] = useState(''), [busy, setBusy] = useState(false), [requirementOpen, setRequirementOpen] = useState(false), [feedback, setFeedback] = useState(''), [search, setSearch] = useState('');
-    const refresh = () => api<typeof list>('/workflows').then(setList).catch(e => setError(e.message));
+    }), [error, setError] = useState(''), [busy, setBusy] = useState(false), [requirementOpen, setRequirementOpen] = useState(false);
+    const refresh = () => api<PlanLists>('/workflows').then(setLists).catch(e => setError(e.message));
     useEffect(() => {
         void refresh();
         api<typeof meta>('/meta').then(setMeta).catch(e => setError(e.message))
@@ -40,14 +37,31 @@ export default function App() {
         }
         setW(undefined);
         const stream = new EventSource(`/api/workflows/${id}/events`);
+        let live = true;
         stream.onmessage = e => {
+            if (!live) return;
             const next: Workflow = JSON.parse(e.data);
-            setW(old => !old || next.version >= old.version ? next : old)
+            setW(old => !old || next.version >= old.version ? next : old);
+            // Keep the sidebar badge, version and delete dialog accurate once a run leaves the active stages.
+            if (next.job && !['analyzing', 'orchestrating'].includes(next.job.status)) void refresh()
         };
         stream.onerror = () => {
-            setError('连接暂时中断，正在重连…')
+            if (!live) return;
+            setError('连接暂时中断，正在重连…');
+            // The plan may have been trashed or purged elsewhere; close instead of reconnecting forever.
+            void api<PlanLists>('/workflows').then(next => {
+                if (!live) return;
+                setLists(next);
+                if (!next.plans.some(p => p.id === id)) {
+                    setId('');
+                    setError('该方案已被删除或移入回收站')
+                }
+            }).catch(() => {})
         };
-        return () => stream.close()
+        return () => {
+            live = false;
+            stream.close()
+        }
     }, [id]);
     const update = (next: Workflow) => {
         setW(old => !old || next.version >= old.version ? next : old);
@@ -76,17 +90,27 @@ export default function App() {
         }
     }
 
+    function forget(deleted: string) {
+        if (deleted !== id) return;
+        setId('');
+        setW(undefined);
+        setRequirementOpen(false)
+    }
+
     const generating = !!w && ['analyzing', 'orchestrating'].includes(w.job?.status || '');
 
-    async function generate() {
+    async function generate(feedback = '') {
         if (!w) return;
-        const draft = localStorage.getItem('weave-draft-' + w.id);
+        let draft: string | null = null;
+        try {
+            draft = localStorage.getItem('weave-draft-' + w.id)
+        } catch {/* storage unavailable: nothing to protect */}
         if (draft && !confirm('本地人工草稿将保留。重生成参考已保存方案；如需纳入修改，请先保存。继续？')) return;
-        await invoke(() => api<Workflow>(`/workflows/${w.id}/generate`, 'POST', {
+        if (['waiting', 'issues'].includes(w.job?.status || '') && !confirm('当前还有待回答的澄清问题或编排异议，重新生成会丢弃它们。继续？')) return;
+        return invoke(() => api<Workflow>(`/workflows/${w.id}/generate`, 'POST', {
             expectedVersion: w.version,
             feedback
-        }));
-        setFeedback('')
+        }))
     }
 
     return <div className="app">
@@ -94,23 +118,15 @@ export default function App() {
             e.preventDefault();
             setId('')
         }}><b>〃</b><span>织序 / WEAVE<small>本地 AI 工作流规划</small></span></a>
-            <div className="section-title"><h3>我的方案</h3>
-                <button className="small" onClick={() => {
-                    setId('');
-                    setError('')
-                }}>＋ 新建
-                </button>
-            </div>
-            <input aria-label="搜索方案" className="search" placeholder="搜索方案…" value={search}
-                   onChange={e => setSearch(e.target.value)}/>
-            <div className="project-list">{list.filter(x => x.title.includes(search)).map(x => <button key={x.id}
-                                                                                                       className={id === x.id ? 'selected' : ''}
-                                                                                                       onClick={() => {
-                                                                                                           setId(x.id);
-                                                                                                           setError('')
-                                                                                                       }}>
-                <strong>{x.title}</strong><span>{x.confirmed ? '已确认' : '待审查'} · {new Date(x.updatedAt).toLocaleDateString()}</span>
-            </button>)}{!list.length && <p className="hint">你的编排方案将保存在这里。</p>}</div>
+            <PlanPanel lists={lists} currentId={id} onLists={setLists} onDeleted={forget}
+                       onSelect={next => {
+                           setId(next);
+                           setError('')
+                       }}
+                       onCreate={() => {
+                           setId('');
+                           setError('')
+                       }}/>
             {w && <div className="generation"><h3>方案生成进度</h3>
                 <div className="step"><i>{w.job?.pm ? '✓' : '1'}</i>
                     <div><strong>PM 分析</strong></div>
@@ -144,16 +160,13 @@ export default function App() {
                 <div className="requirement-bar">
                     <span>需求 v{w.requirement.version} · {w.requirement.images.length} 张图片</span>
                     <button onClick={() => setRequirementOpen(true)}>查看 / 修改需求</button>
-                    <input aria-label="重生成反馈" placeholder="重生成意见，例如：合并相近角色" value={feedback}
-                           onChange={e => setFeedback(e.target.value)} disabled={generating}/>
-                    <button disabled={busy || generating || !!w.candidate || !meta.configured}
-                            onClick={generate}>{current(w) ? 'AI 重生成' : '开始规划'}</button>
-                    {generating && <button className="danger"
-                                           onClick={() => invoke(() => api(`/workflows/${w.id}/cancel`, 'POST', {}))}>取消生成</button>}
                 </div>
                 {w.job && <section className={'job-panel ' + (generating ? 'working' : '')} aria-live="polite">
                     <div className="section-title">
-                        <strong>{states[w.job.status]}</strong>{['failed', 'interrupted', 'cancelled', 'save_failed'].includes(w.job.status) &&
+                        <strong>{states[w.job.status]}</strong>{generating
+                        ? <button className="danger" disabled={busy}
+                                  onClick={() => invoke(() => api(`/workflows/${w.id}/cancel`, 'POST', {}))}>取消生成</button>
+                        : ['failed', 'interrupted', 'cancelled', 'save_failed'].includes(w.job.status) &&
                         <button disabled={busy || w.job.requirement.version !== w.requirement.version}
                                 onClick={() => invoke(() => api(`/workflows/${w.id}/retry`, 'POST', {expectedVersion: w.version}))}>{w.job.result ? '重试保存（不调用模型）' : w.job.pm ? '重试编排（复用 PM）' : '重试 PM 分析'}</button>}
                     </div>
@@ -172,10 +185,16 @@ export default function App() {
                     <summary>查看流式结果预览（尚未校验）</summary>
                     <pre>{w.job.preview || '正在等待模型输出…'}</pre>
                 </details>}</section>}
-                {current(w) ? <Editor key={w.id} w={w} onUpdate={update} onError={setError}/> : <div className="empty">
+                {current(w) ? <Editor key={w.id} w={w} onUpdate={update} onError={setError}
+                                      regenerate={<Regenerate w={w} busy={busy} configured={meta.configured}
+                                                              onGenerate={generate}/>}/> : <div className="empty">
                     <div className="empty-graph">◇ → ◇ → ◇</div>
                     <h2>{generating ? '正在组织你的工作流' : '从需求到清晰的分工'}</h2><p>PM 完成分析后，编排器将自动创建任务与
-                    Agent 定义。</p>{w.candidate && <>
+                    Agent 定义。</p>{!generating && !w.candidate && <div className="empty-actions">
+                    <button className="primary"
+                            disabled={busy || !meta.configured || ['waiting', 'issues'].includes(w.job?.status || '')}
+                            onClick={() => void generate()}>{meta.configured ? '开始 AI 规划' : '尚未配置密钥'}</button>
+                </div>}{w.candidate && <>
                     <p>候选对应需求 v{w.candidate.requirementVersion}，请先处理候选。</p>
                     <button onClick={() => invoke(() => api(`/workflows/${w.id}/candidate`, 'POST', {
                         expectedVersion: w.version,

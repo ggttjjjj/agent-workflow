@@ -21,8 +21,12 @@ export function checkQuestions(q: unknown): Question[] {
 
 export class Engine {
     controllers = new Map<string, AbortController>();
+    store: Store;
+    provider: typeof callModel;
 
-    constructor(public store: Store, public provider = callModel) {
+    constructor(store: Store, provider = callModel) {
+        this.store = store;
+        this.provider = provider;
         for (const w of store.all()) if (active(w.job)) store.mutate(w.id, w => {
             w.job!.status = 'interrupted';
             w.job!.error = '服务已重启，生成中断；不会自动重新调用。请重试。'
@@ -62,6 +66,18 @@ export class Engine {
             if (!active(w.job)) fail('本次生成已结束');
             w.job!.status = 'cancelled';
             w.job!.error = '用户已取消；服务商可能仍在处理在途请求'
+        });
+        this.controllers.get(id)?.abort();
+        return w
+    }
+
+    /** Deleting a plan cancels its generation in the same transaction, so late results can never land. */
+    trash(id: string) {
+        const w = this.store.trash(id, undefined, w => {
+            if (active(w.job)) {
+                w.job!.status = 'cancelled';
+                w.job!.error = '方案已移入回收站，本次生成已取消'
+            }
         });
         this.controllers.get(id)?.abort();
         return w
