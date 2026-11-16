@@ -80,6 +80,8 @@ export class Engine {
             j!.status = j!.pm ? 'orchestrating' : 'analyzing';
             j!.error = undefined;
             j!.preview = '';
+            j!.usage = null;
+            j!.elapsedMs = undefined;
         }, expected);
         void this.run(id, w.job!.id);
         return w

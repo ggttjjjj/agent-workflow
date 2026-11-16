@@ -1,4 +1,4 @@
-import {defaults, type Plan} from '../shared/domain.ts';
+import {defaults, type Plan} from '../src/shared/domain.ts';
 
 export const fixture: Plan = {
     model: 'deepseek-flash',

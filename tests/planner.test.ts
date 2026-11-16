@@ -1,10 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {Store} from '../server/store.ts';
-import {Engine} from '../server/engine.ts';
-import {readStream} from '../server/model.ts';
-import {defaults, validatePlan, current, type Plan, type Workflow} from '../shared/domain.ts';
+import {Store} from '../src/server/store.ts';
+import {Engine} from '../src/server/engine.ts';
+import {readStream} from '../src/server/model.ts';
+import {defaults, validatePlan, current, type Plan, type Workflow} from '../src/shared/domain.ts';
 import {fixture} from './fixtures.ts';
 
 function setup() {
@@ -135,6 +135,34 @@ test('failed orchestration retry reuses PM and frozen settings', async () => {
     done = await settle(store, w.id);
     assert.equal(done.job?.status, 'complete');
     assert.deepEqual(calls, ['pm', 'orchestrator', 'orchestrator'])
+});
+test('retry clears stale usage and elapsed while the new run is pending', async () => {
+    const {store, w} = setup();
+    let failOrchestrator = true, hold = false;
+    let release: ((r: any) => void) | undefined;
+    const engine = new Engine(store, async (_j, s) => {
+        if (s === 'orchestrator' && failOrchestrator) {
+            failOrchestrator = false;
+            throw new Error('temporary')
+        }
+        if (hold) return await new Promise<any>(r => release = r);
+        return response(s)
+    });
+    engine.start(w.id, 1, '');
+    let done = await settle(store, w.id);
+    assert.equal(done.job?.status, 'failed');
+    assert.deepEqual(done.job?.usage, {total_tokens: 10});
+    assert.equal(typeof done.job?.elapsedMs, 'number');
+    hold = true;
+    engine.retry(w.id, done.version);
+    const running = store.get(w.id).job!;
+    assert.equal(running.status, 'orchestrating');
+    assert.equal(running.usage, null);
+    assert.equal(running.elapsedMs, undefined);
+    release!(response('orchestrator'));
+    done = await settle(store, w.id);
+    assert.equal(done.job?.status, 'complete');
+    assert.deepEqual(done.job?.usage, {total_tokens: 10})
 });
 test('cancel rejects late result without invoking downstream stage', async () => {
     const {store, w} = setup();

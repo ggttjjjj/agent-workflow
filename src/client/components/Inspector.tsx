@@ -8,7 +8,7 @@ export default function Inspector({plan, req, task, onChange, onDelete}: {
     onDelete: () => void
 }) {
     if (!task) return <aside className="inspector"><h3>任务详情</h3><p
-        className="hint">选择画布节点，查看目标、输入输出和负责角色。</p></aside>;
+        className="hint">选择画布节点查看详情。</p></aside>;
     const field = (key: 'title' | 'goal') => <label
         className="field">{key === 'title' ? '任务标题' : '任务目标'}<textarea
         aria-label={key === 'title' ? '任务标题' : '任务目标'} rows={key === 'title' ? 2 : 3} value={task[key]}

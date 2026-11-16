@@ -99,7 +99,7 @@ export default function Editor({w, onUpdate, onError}: {
         <div className="editor-head">
             <div><h1>{w.title}</h1><span
                 className="tag">{revision.confirmedAt && !dirty ? '已确认' : '未确认'} · r{revision.number}</span><small
-                className={stored.includes('失败') ? 'error' : ''}>{stored}{dirty ? ' · 有未保存业务修改' : ''}</small>
+                className={stored.includes('失败') ? 'error' : ''}>{stored}</small>
             </div>
             <div className="actions">
                 <button disabled={busy || active || conflict || !dirty || findings.some(f => f.level === 'error')}
@@ -112,7 +112,7 @@ export default function Editor({w, onUpdate, onError}: {
                 <button className="primary"
                         disabled={busy || active || dirty || conflict || !!w.candidate || !!findings.length || draft.requirementVersion !== w.requirement.version || ['waiting', 'issues'].includes(w.job?.status || '')}
                         onClick={() => {
-                            if (confirm('我已审查当前已保存方案。确认不代表下游任务已执行。')) void action('confirm', {
+                            if (confirm('我已审查当前已保存方案。')) void action('confirm', {
                                 expectedVersion: w.version,
                                 revisionId: revision.id,
                                 requirementVersion: w.requirement.version
@@ -243,7 +243,7 @@ export default function Editor({w, onUpdate, onError}: {
             }}/></div>
         </>}
         {tab === 'agents' && <div className="scroll-content">
-            <div className="section-title"><p>角色由编排器按需求生成。能力仅为未来声明，尚未接入或执行。</p>
+            <div className="section-title"><p>角色由编排器按需求生成。</p>
                 <button onClick={() => change({
                     ...draft,
                     agents: [...draft.agents, {
@@ -282,7 +282,7 @@ export default function Editor({w, onUpdate, onError}: {
                 </section>)}</div>
             <h3>全部验收条件均为必需项</h3>{draft.pm.criteria.map(c => <div className="coverage-row" key={c.id}>
                 <strong>{c.id} · {c.text}</strong><span>{draft.pm.tasks.filter(t => t.criteria.includes(c.id)).map(t => t.title).join(' / ') || '⚠ 未覆盖'}</span>
-            </div>)}<p className="hint">关联表示规划覆盖，不代表业务目标已实现。需求级修改请通过“修改需求”提交。</p>
+            </div>)}<p className="hint">关联表示规划覆盖；需求级修改请通过“修改需求”提交。</p>
             <h3>校验结果</h3>{findings.length ? findings.map((f, i) => <button className="finding" key={i}
                                                                                onClick={() => {
                                                                                    if (f.path.startsWith('task:')) {
@@ -290,16 +290,16 @@ export default function Editor({w, onUpdate, onError}: {
                                                                                        setTab('graph')
                                                                                    }
                                                                                }}>{f.path}：{f.message}</button>) :
-                <p className="success">结构与覆盖检查通过，仍需人工审查分工的语义充分性。</p>}<h3>编排理由</h3>
+                <p className="success">结构与覆盖检查通过，仍需人工审查。</p>}<h3>编排理由</h3>
             <p>{draft.rationale}</p></div>}
         {tab === 'compare' && <div className="scroll-content"><h2>版本与候选比较</h2>
-            <p>所有历史确认仅对应原需求与原方案，采用候选不会执行任何任务。</p>
+            <p>所有历史确认仅对应原需求与原方案。</p>
             <div className="compare-grid">
                 <section><h3>当前已保存 r{revision.number}</h3>
                     <pre>{JSON.stringify(revision.plan, null, 2)}</pre>
                 </section>
                 <section><h3>候选方案 {w.candidate ? '' : '（暂无）'}</h3>
-                    <pre>{w.candidate ? JSON.stringify(w.candidate, null, 2) : '重新生成后可在此比较需求、验收、任务、角色、分配与配置。'}</pre>
+                    <pre>{w.candidate ? JSON.stringify(w.candidate, null, 2) : '重新生成后可在此比较。'}</pre>
                 </section>
             </div>
             <h3>保存历史</h3>{w.revisions.map(r => <details key={r.id}>
@@ -307,8 +307,8 @@ export default function Editor({w, onUpdate, onError}: {
                     v{r.plan.requirementVersion} · {new Date(r.createdAt).toLocaleString()} {r.confirmedAt ? '· 已确认' : ''}</summary>
                 <pre>{JSON.stringify(r.plan, null, 2)}</pre>
             </details>)}</div>}
-        <div className="editor-footer"><span>ⓘ 仅规划与审查 · 下游 Agent 尚未执行</span>{findings.length > 0 &&
+        {findings.length > 0 && <div className="editor-footer">
             <button onClick={() => setTab('coverage')}>{findings.filter(f => f.level === 'error').length} 项结构错误
-                · {findings.filter(f => f.level === 'coverage').length} 项覆盖遗漏</button>}</div>
+                · {findings.filter(f => f.level === 'coverage').length} 项覆盖遗漏</button></div>}
     </div>
 }

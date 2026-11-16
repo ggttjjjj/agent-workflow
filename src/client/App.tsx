@@ -3,6 +3,7 @@ import {api} from './api';
 import InputPanel from './components/InputPanel';
 import SettingsPanel from './components/SettingsPanel';
 import Editor from './components/Editor';
+import {formatUsage} from './usage';
 import {current, type Workflow, type Picture} from '../shared/domain';
 
 const states: Record<string, string> = {
@@ -43,7 +44,7 @@ export default function App() {
             setW(old => !old || next.version >= old.version ? next : old)
         };
         stream.onerror = () => {
-            setError('连接暂时中断，正在重连；不会重复启动 AI 调用。')
+            setError('连接暂时中断，正在重连…')
         };
         return () => stream.close()
     }, [id]);
@@ -112,18 +113,18 @@ export default function App() {
             </button>)}{!list.length && <p className="hint">你的编排方案将保存在这里。</p>}</div>
             {w && <div className="generation"><h3>方案生成进度</h3>
                 <div className="step"><i>{w.job?.pm ? '✓' : '1'}</i>
-                    <div><strong>PM 分析</strong><small>需求、验收与任务依赖</small></div>
+                    <div><strong>PM 分析</strong></div>
                 </div>
                 <div className="step"><i>{w.job?.status === 'complete' ? '✓' : '2'}</i>
-                    <div><strong>AI 编排</strong><small>动态角色与任务分工</small></div>
+                    <div><strong>AI 编排</strong></div>
                 </div>
-                <p className={generating ? 'pulse' : ''}>{states[w.job?.status || ''] || '等待开始规划'}</p>{w.job?.elapsedMs &&
-                    <small>耗时 {(w.job.elapsedMs / 1000).toFixed(1)} 秒</small>}<small>用量：{w.job?.usage ? JSON.stringify(w.job.usage) : '未知'}</small>
+                <p className={generating ? 'pulse' : ''}>{states[w.job?.status || ''] || '等待开始规划'}</p>{w.job?.elapsedMs != null &&
+                    <small>耗时 {(w.job.elapsedMs / 1000).toFixed(1)} 秒</small>}<small className="usage">用量：{formatUsage(w.job?.usage)}</small>
             </div>}
             <div className="sidebar-bottom">
-                <button onClick={() => setSettings(true)}>⚙ 设置与默认提示词</button>
+                <button onClick={() => setSettings(true)}>⚙ 设置</button>
                 <span
-                    className={meta.configured ? 'success' : 'muted'}>{meta.configured ? '● DeepSeek 已配置' : '○ 等待配置 DeepSeek 密钥'}</span>
+                    className={meta.configured ? 'success' : 'muted'}>{meta.configured ? '● 已配置' : '○ 未配置'}</span>
             </div>
         </aside>
         <main>{error && <div role="alert" className="global-error"><span>{error}</span>
@@ -135,7 +136,7 @@ export default function App() {
                     <h1>把想法，编排成方案。</h1><p>从一份需求出发，让 AI 拆解任务、组织角色，<br/>再由你审查和决定。</p>
                 </div>
                 {!meta.configured && <div className="warning">尚未配置密钥：在项目 .env 中设置 DEEPSEEK_API_KEY
-                    后重启服务。需求仍可先保存。</div>}<InputPanel onSubmit={create} busy={busy}
+                    后重启服务。</div>}<InputPanel onSubmit={create} busy={busy}
                                                                  label={meta.configured ? '开始 AI 规划' : '保存需求'}/>
                 <div className="welcome-foot"><span>01 分析需求</span><span>02 编排角色</span><span>03 人工确认</span>
                 </div>
@@ -176,12 +177,12 @@ export default function App() {
                     </button>
                 </>}{generating && <details>
                     <summary>查看流式结果预览（尚未校验）</summary>
-                    <pre>{w.job.preview || '正在等待模型输出；不展示内部思考内容。'}</pre>
+                    <pre>{w.job.preview || '正在等待模型输出…'}</pre>
                 </details>}</section>}
                 {current(w) ? <Editor key={w.id} w={w} onUpdate={update} onError={setError}/> : <div className="empty">
                     <div className="empty-graph">◇ → ◇ → ◇</div>
                     <h2>{generating ? '正在组织你的工作流' : '从需求到清晰的分工'}</h2><p>PM 完成分析后，编排器将自动创建任务与
-                    Agent 定义。</p><p className="hint">下游 Agent 仅作为方案定义，不会执行。</p>{w.candidate && <>
+                    Agent 定义。</p>{w.candidate && <>
                     <p>候选对应需求 v{w.candidate.requirementVersion}，请先处理候选。</p>
                     <button onClick={() => invoke(() => api(`/workflows/${w.id}/candidate`, 'POST', {
                         expectedVersion: w.version,

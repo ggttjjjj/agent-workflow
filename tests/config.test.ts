@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {resolve} from 'node:path';
-import {loadConfig} from '../server/config.ts';
+import {loadConfig} from '../src/server/config.ts';
 
 function setup(t: test.TestContext) {
     const root = mkdtempSync(resolve(tmpdir(), 'weave-config-'));

@@ -33,9 +33,17 @@ npm test
 
 ## 项目结构
 
-- `shared/domain.ts`：领域类型、校验与默认提示词。
-- `server/model.ts`：DeepSeek请求与流式解析。
-- `server/engine.ts`：两阶段规划、等待、取消、重试和候选保护。
-- `server/store.ts`：SQLite持久化与版本条件写入。
-- `server/index.ts`：本机API、图片校验、SSE与页面服务。
-- `src/components/`：输入、图编辑、属性、设置及方案审查。
+```
+src/client/           前端（React）
+  ├─ main.tsx         浏览器入口
+  ├─ App.tsx / api.ts / style.css
+  └─ components/      InputPanel、Editor、Graph、Inspector、SettingsPanel
+src/server/           后端（Node/Express）
+  ├─ index.ts         API、SSE、图片校验、页面服务
+  ├─ engine.ts        两阶段规划、取消、重试、候选保护
+  ├─ model.ts         DeepSeek 请求与流解析
+  ├─ store.ts         SQLite 持久化
+  └─ config.ts        环境变量与项目根解析
+src/shared/domain.ts  前后端共用模型
+tests/                测试
+```

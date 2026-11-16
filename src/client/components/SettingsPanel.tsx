@@ -13,11 +13,11 @@ export default function SettingsPanel({onClose}: { onClose: () => void }) {
     return <div className="modal-back">
         <section className="modal settings">
             <header>
-                <div><h2>模型与提示词设置</h2><p>新生成生效 · 正在进行的请求保持原设置</p></div>
+                <div><h2>模型与提示词设置</h2><p>新生成生效</p></div>
                 <button onClick={onClose} aria-label="关闭设置">×</button>
             </header>
             {s && <>
-                <div className="model-band">deepseek-flash <span>思考模式开启 · 密钥仅在后端 .env 配置</span></div>
+                <div className="model-band">deepseek-flash</div>
                 <div
                     className="efforts">{(['pmEffort', 'orchestratorEffort', 'downstreamEffort'] as const).map((k, i) =>
                     <label className="field" key={k}>{['PM 思考强度', '编排器思考强度', '下游统一默认强度'][i]}<select

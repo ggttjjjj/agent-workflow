@@ -36,7 +36,7 @@ export default function InputPanel({initial, onSubmit, busy, label = '开始 AI 
             void add(files)
         }
     }}>
-        <label className="field">你的需求 / Design spec<textarea aria-label="需求描述" rows={8}
+        <label className="field">你的需求<textarea aria-label="需求描述" rows={8}
                                                                  placeholder="描述你的目标、交付物和约束。例如：为社区策划一场90分钟的亲子阅读活动，需要活动流程、场地安排和预算方案。"
                                                                  value={text} onChange={e => setText(e.target.value)}/></label>
         <div className="upload-row"><label className="button upload">＋ 添加参考图片<input type="file"
@@ -49,7 +49,7 @@ export default function InputPanel({initial, onSubmit, busy, label = '开始 AI 
             <button aria-label={'移除' + i.name} onClick={() => setImages(images.filter(x => x.id !== i.id))}>×</button>
             <small>{i.name}</small></div>)}</div>
         {error && <p role="alert" className="error">{error}</p>}<p className="hint">文本与图片将发送给 DeepSeek
-        分析。仅生成编排方案，不执行下游任务。</p>
+        分析。</p>
         <button className="primary" disabled={busy || (!text.trim() && !images.length)}
                 onClick={() => onSubmit(text, images)}>{busy ? '正在提交…' : label + ' →'}</button>
     </div>

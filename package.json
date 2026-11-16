@@ -7,9 +7,9 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "dev": "node --import tsx server/index.ts",
+    "dev": "node --import tsx src/server/index.ts",
     "build": "tsc --noEmit && vite build",
-    "start": "node --import tsx server/index.ts --production",
+    "start": "node --import tsx src/server/index.ts --production",
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {

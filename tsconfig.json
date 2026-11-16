@@ -20,8 +20,6 @@
   },
   "include": [
     "src",
-    "server",
-    "shared",
     "tests",
     "vite.config.ts"
   ]
